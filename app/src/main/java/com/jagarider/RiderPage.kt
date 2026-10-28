@@ -154,6 +154,7 @@ class RiderPage(private val act: MainActivity) {
         col.addView(mc, act.lp(top = 12))
         map = RainMapView(act).also {
             it.interactive = true
+            it.showRangeCircle = false
             it.onResetView = { render() }
             mc.addView(it)
         }

@@ -124,7 +124,7 @@ object Weather {
             "&forecast_hours=7&timezone=auto"
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
-        conn.readTimeout = 15_000
+        conn.readTimeout = 25_000
         conn.setRequestProperty("User-Agent", "JagaRide")
         val text = try {
             val ok = conn.responseCode == 200

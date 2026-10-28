@@ -78,7 +78,8 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   `scan()` walks every z7 pixel (~1.2 km) in the area → centre (≤1.5 px), nearest, heaviest, heaviest ≤ 50 km.
 - Main screen + rain alerts use radar for current rain/nearest/verdict; Open-Meteo stays for forecasts and
   is the fallback when radar fails. Model thunderstorm codes only count when radar shows ≥ 4 mm/h.
-- Map layer switches automatically (no toggle, v2.0): range ≤ 50 km → radar tiles (`MapTiles.radar`, memory-only,
+- Rain is drawn over the WHOLE map (no clipping); the dashed circle is only an indicator of the slider radius
+  (`circleKm`, independent of zoom). Map layer switches by the CURRENT zoom: `viewKm` ≤ 50 km → radar tiles (`MapTiles.radar`, memory-only,
   z7 stretched) — same source as status/alerts; ≥ 100 km / Peninsula → model overlay (`Radar.shownFor`). The
   nearest/heaviest text follows the map source; a non-clickable label on the map names the source.
   Attribution: RainViewer on map + About.
@@ -98,6 +99,7 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
 - `LocationShareService`: foreground service (type location) started only by the user's "Start sharing" button;
   GPS/network updates every 5 s, uploads every ≥10 s; Stop in app or notification removes my entry.
 - RiderPage polls `groups/{gid}/m` every 8 s while visible; map = `RainMapView.fitRiders` (auto-fit ≥ 0.5 km) + `riders` markers.
-  `interactive` map: two fingers = pinch zoom (0.15–400 km) + pan, one finger scrolls the page, double-tap re-fits;
+  `interactive` map (both tabs, v2.4): two fingers = pinch zoom (0.15–400 km) + pan, one finger scrolls the page
+  (quick-scale disabled), double-tap resets (weather: back to slider area; riders: re-fit);
   after a manual zoom/pan, refreshes keep the view (`userView`).
   auto-zoom to fit; hides riders idle > 2 h, greys > 5 min.

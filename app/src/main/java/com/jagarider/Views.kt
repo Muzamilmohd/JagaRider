@@ -36,10 +36,13 @@ private fun alpha(color: Int, a: Int) = Color.argb(a, Color.red(color), Color.gr
  */
 class RainMapView(ctx: Context) : View(ctx) {
 
-    /** Separuh lebar kawasan yang dipapar (km) — bulatan jarak bila berpusat pada rider. */
+    /** Separuh lebar kawasan yang dipapar (km) — berubah bila pengguna cubit zum. */
     private var viewKm = 10.0
-    private var setting = 10           // pilihan slider (km atau Weather.PENINSULA)
+    /** Jejari bulatan penunjuk (km) = pilihan slider; tak berubah bila zum. */
+    private var circleKm = 10.0
     private var aroundRider = true
+    /** Tab Cuaca: bulatan jarak sebagai penunjuk; tab Rider: tiada bulatan (skala lebar peta). */
+    var showRangeCircle = true
 
     private var riderLat = Double.NaN
     private var riderLon = Double.NaN
@@ -58,7 +61,6 @@ class RainMapView(ctx: Context) : View(ctx) {
     }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clip = Path()
-    private val ring = Path()
     private val rect = RectF()
 
     // keadaan unjuran untuk lukisan semasa
@@ -77,16 +79,9 @@ class RainMapView(ctx: Context) : View(ctx) {
     var riders: List<RiderGroup.Rider> = emptyList()
         set(v) { field = v; invalidate() }
 
-    /** Tab Rider: pusatkan pada saya tanpa data cuaca (hanya radar + rider). */
-    fun setCenter(lat: Double, lon: Double, rangeSetting: Int) {
-        riderLat = lat
-        riderLon = lon
-        preview(rangeSetting)
-    }
+    // ------------------------------------------------------------ zum & gerak (kedua-dua tab)
 
-    // ------------------------------------------------------------ peta rider: zum & gerak
-
-    /** Tab Rider: cubit untuk zum, seret untuk gerak, ketik dua kali untuk kembali muat semua rider. */
+    /** Cubit untuk zum, seret untuk gerak (dua jari), ketik dua kali untuk kembali ke paparan asal. */
     var interactive = false
     /** Dipanggil bila pengguna ketik dua kali (kembali ke zum automatik). */
     var onResetView: (() -> Unit)? = null
@@ -101,7 +96,6 @@ class RainMapView(ctx: Context) : View(ctx) {
             centerLat = lat
             centerLon = lon
             viewKm = km
-            setting = km.toInt().coerceAtLeast(1)
         }
         invalidate()
     }
@@ -122,12 +116,14 @@ class RainMapView(ctx: Context) : View(ctx) {
             lastFx = d.focusX
             lastFy = d.focusY
             viewKm = (viewKm / d.scaleFactor).coerceIn(0.15, 400.0)
-            setting = viewKm.toInt().coerceAtLeast(1) // radar bila ≤ 50 km
             userView = true
             invalidate()
             return true
         }
-    })
+    }).apply {
+        // tiada zum satu jari (ketik + seret) — boleh terpicu tanpa sengaja semasa skrol halaman
+        isQuickScaleEnabled = false
+    }
 
     private fun panBy(dx: Float, dy: Float) {
         if (world == 0.0 || centerLat.isNaN()) return
@@ -166,19 +162,33 @@ class RainMapView(ctx: Context) : View(ctx) {
         riderLon = r.point.lon
         this.samples = samples
         buildOverlay()
-        preview(rangeSetting)
+        applyArea(rangeSetting) // data baru tak reset zum / gerak pengguna
     }
 
-    /** Tukar zum / kawasan serta-merta (semasa slider ditarik), sebelum data baru tiba. */
+    /** Lokasi diketahui tapi data cuaca belum / gagal: tetap papar peta + radar di sekeliling rider. */
+    fun setCenter(lat: Double, lon: Double, rangeSetting: Int) {
+        riderLat = lat
+        riderLon = lon
+        applyArea(rangeSetting)
+    }
+
+    /** Slider ditukar: tukar kawasan & zum serta-merta (reset zum pengguna). */
     fun preview(rangeSetting: Int) {
-        setting = rangeSetting
+        userView = false
+        applyArea(rangeSetting)
+    }
+
+    private fun applyArea(rangeSetting: Int) {
         if (!riderLat.isNaN()) {
             val a = Weather.area(riderLat, riderLon, rangeSetting)
-            centerLat = a.lat
-            centerLon = a.lon
             aroundRider = a.aroundRider
-            // Semenanjung: muatkan Perlis–Johor dalam peta segi empat
-            viewKm = if (a.aroundRider) a.halfKm else 300.0
+            circleKm = a.halfKm
+            if (!userView) {
+                centerLat = a.lat
+                centerLon = a.lon
+                // Semenanjung: muatkan Perlis–Johor dalam peta segi empat
+                viewKm = if (a.aroundRider) a.halfKm else 300.0
+            }
         }
         invalidate()
     }
@@ -289,17 +299,12 @@ class RainMapView(ctx: Context) : View(ctx) {
         val rx = sx(riderLon)
         val ry = sy(riderLat)
 
-        // Taburan hujan — sekeliling rider dipotong ikut bulatan jarak (tepi grid segi empat tak cantik)
+        // Taburan hujan
         val frame = radarFrame
-        // Zum dekat (≤ 50 km) = radar sebenar (sama sumber dengan status & amaran);
-        // zum jauh (≥ 100 km / Semenanjung) = taburan ramalan model untuk rancang ride jauh
-        val radar = frame != null && Radar.shownFor(setting)
+        // Zum dekat (≤ 50 km) = radar sebenar; zum jauh = taburan ramalan model.
+        // Hujan dilukis di SELURUH peta — bulatan hanya penunjuk jarak.
+        val radar = frame != null && viewKm <= 50.0
         c.save()
-        if (aroundRider && !interactive) {
-            ring.reset()
-            ring.addCircle(rx, ry, radiusPx, Path.Direction.CW)
-            c.clipPath(ring)
-        }
         if (radar) {
             // Radar sebenar: jubin zum ≤ 7 diregangkan ke zum peta
             val rz = minOf(z, Radar.ZOOM)
@@ -329,7 +334,7 @@ class RainMapView(ctx: Context) : View(ctx) {
             for (s in samples) if (s.thunder) c.drawText("⚡", sx(s.point.lon), sy(s.point.lat) + dp(6f), text)
         }
 
-        if (interactive) {
+        if (!showRangeCircle) {
             // Peta rider: tiada bulatan — tunjuk lebar peta sebagai skala
             val widthKm = viewKm * 2 * 1.15
             val scaleText = if (widthKm < 1.0) "↔ ${(Math.round(widthKm * 20) * 50)} m" else "↔ " + Weather.formatKm(Math.round(widthKm * 10) / 10.0)
@@ -340,9 +345,10 @@ class RainMapView(ctx: Context) : View(ctx) {
             paint.strokeWidth = dp(2f)
             paint.color = alpha(pal.text, 170)
             paint.pathEffect = DashPathEffect(floatArrayOf(dp(8f), dp(6f)), 0f)
-            c.drawCircle(rx, ry, radiusPx, paint)
+            val circlePx = (circleKm / kmPerPx).toFloat()
+            c.drawCircle(rx, ry, circlePx, paint)
             paint.pathEffect = null
-            label(c, Weather.formatKm(viewKm), rx, ry - radiusPx + dp(4f))
+            label(c, Weather.formatKm(circleKm), rx, ry - circlePx + dp(4f))
         } else {
             label(c, "🇲🇾 " + t("Semenanjung Malaysia", "Peninsular Malaysia", "马来西亚半岛", "தீபகற்ப மலேசியா"), w / 2, dp(22f))
         }

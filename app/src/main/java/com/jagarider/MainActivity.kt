@@ -169,8 +169,19 @@ class MainActivity : BaseActivity() {
             addView(label("${RANGES.first()} km", 12f, color = pal.sub), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(label("🇲🇾 " + t("Semenanjung", "Peninsula", "半岛", "தீபகற்பம்"), 12f, color = pal.sub))
         })
-        map = RainMapView(this).apply { preview(RANGES[start]) }
+        map = RainMapView(this).apply {
+            preview(RANGES[start])
+            interactive = true
+            // ketik dua kali = kembali ke kawasan slider
+            onResetView = { preview(Prefs.rangeKm(this@MainActivity)) }
+        }
         mapCard.addView(map, lp(top = 6))
+        mapCard.addView(label("🤏 " + t(
+            "Dua jari: cubit untuk zum / seret untuk gerak · ketik dua kali: kembali",
+            "Two fingers: pinch to zoom / drag to move · double-tap: reset",
+            "双指：缩放 / 拖动 · 双击：复原",
+            "இரு விரல்: பெரிதாக்க / நகர்த்த · இருமுறை தட்டு: மீட்டமை",
+        ), 12f, color = pal.sub).apply { gravity = Gravity.CENTER })
         nearestText = label("", 15f)
         mapCard.addView(nearestText, lp(top = 6))
 
@@ -420,8 +431,10 @@ class MainActivity : BaseActivity() {
         val range = Prefs.rangeKm(this)
         val area = Weather.area(loc.latitude, loc.longitude, range)
         val points = Weather.points(loc.latitude, loc.longitude, area)
+        map.setCenter(loc.latitude, loc.longitude, range) // peta keluar terus, sebelum data cuaca siap
         Thread {
-            val result = runCatching { Weather.fetch(points) }
+            // cuba semula sekali — rangkaian mobile kadang-kadang perlahan
+            val result = runCatching { Weather.fetch(points) }.recoverCatching { Weather.fetch(points) }
             // Radar sebenar untuk "sekarang" — kalau gagal, guna ramalan model sahaja
             val scan = runCatching { Radar.scan(loc.latitude, loc.longitude, area) }.getOrNull()
             main.post {
@@ -432,6 +445,7 @@ class MainActivity : BaseActivity() {
                     render(it, range, scan)
                 }.onFailure {
                     statusText.text = t("Gagal (internet?): ", "Failed (internet?): ", "失败（网络？）：", "தோல்வி (இணையம்?): ") + it.message
+                    map.radarFrame = scan?.frame ?: Radar.current() // radar tetap keluar walaupun ramalan gagal
                 }
             }
         }.start()
