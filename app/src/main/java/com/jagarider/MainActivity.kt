@@ -289,6 +289,8 @@ class MainActivity : BaseActivity() {
                 )
             } else {
                 lastLocation = loc
+                Prefs.setLastLocation(this, loc.latitude, loc.longitude)
+                RainAlert.schedule(this)
                 fetchWeather(loc)
             }
         }

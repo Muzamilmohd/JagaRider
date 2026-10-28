@@ -28,6 +28,35 @@ object Prefs {
         sp(c).edit().putInt("range_km", km).apply()
     }
 
+    /** Amaran hujan (notifikasi berbunyi) di latar. */
+    fun rainAlert(c: Context): Boolean = sp(c).getBoolean("rain_alert", true)
+    fun setRainAlert(c: Context, on: Boolean) {
+        sp(c).edit().putBoolean("rain_alert", on).apply()
+    }
+
+    /** Jarak kawasan amaran hujan (km). */
+    fun alertKm(c: Context): Int = sp(c).getInt("alert_km", 10)
+    fun setAlertKm(c: Context, km: Int) {
+        sp(c).edit().putInt("alert_km", km).apply()
+    }
+
+    /** Lokasi terakhir rider (semasa app dibuka) — digunakan semakan amaran di latar. */
+    fun lastLocation(c: Context): Pair<Double, Double>? {
+        val p = sp(c)
+        if (!p.contains("last_lat")) return null
+        return p.getFloat("last_lat", 0f).toDouble() to p.getFloat("last_lon", 0f).toDouble()
+    }
+    fun setLastLocation(c: Context, lat: Double, lon: Double) {
+        sp(c).edit().putFloat("last_lat", lat.toFloat()).putFloat("last_lon", lon.toFloat()).apply()
+    }
+
+    /** Tahap amaran terakhir (RainAlert.NONE/RAIN/STORM) dan masa notifikasi terakhir. */
+    fun alertState(c: Context): Int = sp(c).getInt("alert_state", 0)
+    fun alertTime(c: Context): Long = sp(c).getLong("alert_time", 0L)
+    fun setAlertState(c: Context, state: Int, time: Long) {
+        sp(c).edit().putInt("alert_state", state).putLong("alert_time", time).apply()
+    }
+
     fun autoUpdate(c: Context): Boolean = sp(c).getBoolean("auto_update", true)
     fun setAutoUpdate(c: Context, on: Boolean) {
         sp(c).edit().putBoolean("auto_update", on).apply()

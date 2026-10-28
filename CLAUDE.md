@@ -29,7 +29,15 @@ Light/dark/follow-system theme (`Prefs.theme`): colours come from `Palette` (Ui.
   precipitation_probability) is built in `MainActivity.renderHours`. `Weather.icon(code, "HH:mm")` = emoji, day 7–18.
 - `MainActivity.kt` – main screen (code-built UI): location (LocationManager, no Play services), verdict
   (🟢/🟡/🟠/🔴), auto-refresh every 5 min while resumed, ⚙️ button → `SettingsActivity`.
-- `SettingsActivity.kt` – language, display mode, app updates (check button + daily switch), About/credit.
+- `SettingsActivity.kt` – language, display mode, rain alerts, app updates (check button + daily switch), About/credit.
+  Radio buttons use `View.generateViewId()` + `isSaveEnabled = false`: shared IDs made recreate() restore the
+  wrong group and the language got stuck (fixed v1.6).
+- `RainAlert.kt` – `RainAlertJob` (JobScheduler, ~15 min, persisted) checks a 5×5 grid around the last location
+  saved while the app was open (no background-location permission). Rain → channel `rain_alert_v1` with
+  `res/raw/rain.wav`; heavy (≥10 mm/h) or thunderstorm → `storm_alert_v1` with `res/raw/storm.wav`. Channel
+  sounds are fixed once created — bump the channel ID if a sound changes. Sounds are synthesized by
+  `tools/GenSounds.java` (`java tools/GenSounds.java app/src/main/res/raw`). Test: `adb shell cmd jobscheduler run -f com.jagarider 4343`.
+  `RECEIVE_BOOT_COMPLETED` is required for `setPersisted(true)` (without it the jobs silently never schedule).
 - `UpdateUi.kt` – shared check → dialog → install flow (main screen auto-check + Settings button).
 - `Updater.kt` – checks `https://api.github.com/repos/<jagarider.updateRepo>/releases/latest` (repo in
   `gradle.properties`, `Muzamilmohd/JagaRider`), daily via `UpdateJob` + on app open, installs the release's

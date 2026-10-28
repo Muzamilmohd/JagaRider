@@ -2,6 +2,7 @@ package com.jagarider
 
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -64,6 +65,50 @@ class SettingsActivity : BaseActivity() {
             }
         )
 
+        // Amaran hujan
+        col.addView(header(t("Amaran hujan", "Rain alerts", "降雨提醒", "மழை எச்சரிக்கை")))
+        val alertCard = card()
+        col.addView(alertCard, lp(top = 8))
+        alertCard.addView(Switch(this).apply {
+            text = "🔔 " + t("Notifikasi berbunyi bila hujan di kawasan saya", "Sound alert when it rains in my area", "我所在地区下雨时响铃提醒", "என் பகுதியில் மழை பெய்தால் ஒலி எச்சரிக்கை")
+            textSize = 15f
+            setTextColor(pal.text)
+            isChecked = Prefs.rainAlert(this@SettingsActivity)
+            setPadding(0, dp(4), 0, dp(8))
+            setOnCheckedChangeListener { _, on ->
+                Prefs.setRainAlert(this@SettingsActivity, on)
+                RainAlert.schedule(this@SettingsActivity)
+            }
+        })
+        alertCard.addView(label(t("Kawasan amaran (jarak dari anda)", "Alert area (distance from you)", "提醒范围（离您的距离）", "எச்சரிக்கை பகுதி (உங்களிடமிருந்து தூரம்)"), 14f, bold = true, color = pal.sub), lp(top = 4))
+        val alertKms = listOf(5, 10, 25)
+        alertCard.addView(
+            radios(
+                alertKms.map { "$it km" },
+                alertKms.indexOf(Prefs.alertKm(this)).coerceAtLeast(0),
+            ) { i -> Prefs.setAlertKm(this, alertKms[i]) }.apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+        )
+        alertCard.addView(
+            label(
+                t(
+                    "🌧️ Hujan biasa = bunyi hujan\n⛈️ Hujan lebat / ribut petir = bunyi hujan + guruh\nDisemak ~setiap 15 minit di sekitar lokasi terakhir semasa app dibuka.",
+                    "🌧️ Normal rain = rain sound\n⛈️ Heavy rain / thunderstorm = rain + thunder sound\nChecked about every 15 minutes around your last location when the app was open.",
+                    "🌧️ 普通降雨 = 雨声\n⛈️ 大雨/雷暴 = 雨声 + 雷声\n约每15分钟检查一次（以上次打开应用时的位置为准）。",
+                    "🌧️ சாதாரண மழை = மழை ஒலி\n⛈️ கனமழை / இடிமழை = மழை + இடி ஒலி\nஆப் கடைசியாகத் திறந்த இடத்தைச் சுற்றி ~15 நிமிடத்திற்கு ஒருமுறை சரிபார்க்கப்படும்.",
+                ),
+                13f, color = pal.sub,
+            ),
+            lp(top = 6),
+        )
+        alertCard.addView(LinearLayout(this).apply {
+            addView(pill("🌧️ " + t("Cuba bunyi hujan", "Test rain", "试听雨声", "மழை ஒலி")) { RainAlert.test(this@SettingsActivity, RainAlert.RAIN) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, 0, dp(4), 0) })
+            addView(pill("⛈️ " + t("Cuba bunyi ribut", "Test storm", "试听雷雨", "புயல் ஒலி")) { RainAlert.test(this@SettingsActivity, RainAlert.STORM) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(4), 0, 0, 0) })
+        }, lp(top = 8))
+
         // Kemas kini app
         col.addView(header(t("Kemas kini app", "App updates", "应用更新", "ஆப் புதுப்பிப்புகள்")))
         val upCard = card()
@@ -117,18 +162,25 @@ class SettingsActivity : BaseActivity() {
         )
     }
 
-    /** Senarai pilihan radio; onPick dipanggil bila pilihan ditukar. */
+    /**
+     * Senarai pilihan radio; onPick dipanggil hanya bila pengguna tekan pilihan lain.
+     * ID unik + tiada simpan keadaan: kalau tidak, recreate() memulihkan butang ikut ID dan kumpulan
+     * Bahasa & Paparan (ID sama) bertukar pilihan sendiri — bahasa tersangkut.
+     */
     private fun radios(options: List<String>, selected: Int, onPick: (Int) -> Unit) = RadioGroup(this).apply {
+        isSaveEnabled = false
         options.forEachIndexed { i, s ->
-            addView(RadioButton(this@SettingsActivity).apply {
-                id = i + 1
+            val b = RadioButton(this@SettingsActivity).apply {
+                id = View.generateViewId()
+                isSaveEnabled = false
                 text = s
                 textSize = 16f
                 setTextColor(pal.text)
                 setPadding(dp(8), dp(10), 0, dp(10))
-            })
+                setOnClickListener { if (i != selected) onPick(i) }
+            }
+            addView(b)
+            if (i == selected) check(b.id)
         }
-        check(selected + 1)
-        setOnCheckedChangeListener { _, id -> if (id - 1 != selected) onPick(id - 1) }
     }
 }
