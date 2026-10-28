@@ -11,10 +11,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.os.SystemClock
-import android.view.MotionEvent
 import android.view.View
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
@@ -68,29 +65,8 @@ class RainMapView(ctx: Context) : View(ctx) {
     /** Frame radar RainViewer (null = tiada radar, guna ramalan model). */
     var radarFrame: Radar.Frame? = null
         set(v) { field = v; invalidate() }
-    /** true = lapisan radar sebenar, false = taburan ramalan model. Ditukar dengan butang pada peta. */
-    var showRadar = true
     private val radarPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply { alpha = 215 }
     private val chipRect = RectF()
-
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        val inChip = chipRect.contains(e.x, e.y)
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> return inChip
-            MotionEvent.ACTION_UP -> if (inChip) {
-                performClick()
-                return true
-            }
-        }
-        return false
-    }
-
-    override fun performClick(): Boolean {
-        super.performClick()
-        showRadar = !showRadar
-        invalidate()
-        return true
-    }
 
     /** Data baru: sampel pertama = lokasi rider. */
     fun set(samples: List<Weather.Sample>, rangeSetting: Int) {
@@ -224,7 +200,9 @@ class RainMapView(ctx: Context) : View(ctx) {
 
         // Taburan hujan — sekeliling rider dipotong ikut bulatan jarak (tepi grid segi empat tak cantik)
         val frame = radarFrame
-        val radar = showRadar && frame != null
+        // Zum dekat (≤ 50 km) = radar sebenar (sama sumber dengan status & amaran);
+        // zum jauh (≥ 100 km / Semenanjung) = taburan ramalan model untuk rancang ride jauh
+        val radar = frame != null && Radar.shownFor(setting)
         c.save()
         if (aroundRider) {
             ring.reset()
@@ -294,26 +272,21 @@ class RainMapView(ctx: Context) : View(ctx) {
         text.color = pal.sub
         c.drawText(attr, w - dp(4f), h - dp(4.5f), text)
 
-        // Butang tukar lapisan: radar sebenar ↔ ramalan model
+        // Label sumber lapisan (bukan butang) — tukar sendiri ikut zum
         val chip = if (radar) {
-            "📡 Radar " + SimpleDateFormat("HH:mm", Locale.US).format(Date(frame!!.time)) + "  ⇄"
+            "📡 " + t("Radar sebenar", "Live radar", "实时雷达", "நேரடி ரேடார்") + " " + Clock.time(frame!!.time)
         } else {
-            "🔮 " + t("Ramalan model", "Model forecast", "模型预报", "மாதிரி முன்னறிவிப்பு") + "  ⇄"
+            "🔮 " + t("Ramalan model", "Model forecast", "模型预报", "மாதிரி முன்னறிவிப்பு")
         }
-        text.textSize = dp(13f)
+        text.textSize = dp(12f)
         text.isFakeBoldText = true
         val cw = text.measureText(chip)
-        chipRect.set(dp(8f), h - dp(52f), dp(8f) + cw + dp(20f), h - dp(20f))
-        paint.color = alpha(pal.card, 235)
-        c.drawRoundRect(chipRect, dp(16f), dp(16f), paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = dp(1.5f)
-        paint.color = pal.orange
-        c.drawRoundRect(chipRect, dp(16f), dp(16f), paint)
-        paint.style = Paint.Style.FILL
+        chipRect.set(dp(8f), h - dp(46f), dp(8f) + cw + dp(16f), h - dp(20f))
+        paint.color = alpha(pal.card, 225)
+        c.drawRoundRect(chipRect, dp(13f), dp(13f), paint)
         text.textAlign = Paint.Align.CENTER
         text.color = pal.text
-        c.drawText(chip, chipRect.centerX(), chipRect.centerY() + dp(4.5f), text)
+        c.drawText(chip, chipRect.centerX(), chipRect.centerY() + dp(4f), text)
         text.isFakeBoldText = false
 
         c.restore()
@@ -428,7 +401,7 @@ class RainChartView(ctx: Context) : View(ctx) {
             paint.color = if (v < 0.1) pal.border else Weather.Level.of(v).color
             c.drawRoundRect(x, bottom - h, x + w, bottom, dp(3f), dp(3f), paint)
             if (v >= 0.1) c.drawText(String.format(Locale.US, "%.1f", v), x + w / 2, bottom - h - dp(4f), text)
-            if (i % 2 == 1 || n <= 4) c.drawText(times.getOrElse(i) { "" }, x + w / 2, height - dp(4f), text)
+            if (i % 2 == 1 || n <= 4) c.drawText(Clock.hm(times.getOrElse(i) { "" }), x + w / 2, height - dp(4f), text)
         }
     }
 }

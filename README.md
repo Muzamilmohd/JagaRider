@@ -9,7 +9,7 @@ Semak hujan sebelum ride (Android 8.0+).
 - Keputusan ringkas: 🟢 Cuaca baik untuk ride / 🟡 / 🟠 / 🔴 Tangguh dulu
 - Dikemas kini automatik setiap 5 minit semasa app dibuka
 - **Amaran hujan 🔔**: notifikasi berbunyi bila hujan dalam 5 / 10 / 25 km (ikut lokasi live jika lokasi dibenarkan sepanjang masa) — bunyi hujan untuk hujan biasa, hujan + guruh untuk hujan lebat / ribut petir
-- **Tetapan ⚙️**: bahasa (Melayu / English / 中文 / தமிழ்) dan mod paparan (ikut sistem / cerah / gelap)
+- **Tetapan ⚙️**: bahasa (Melayu / English / 中文 / தமிழ்) dan mod paparan (ikut sistem / cerah / gelap) dan format jam 12 / 24 jam
 - **Kemas kini sendiri** dari GitHub Releases (semak setiap hari, boleh dimatikan)
 
 ## Cara pasang

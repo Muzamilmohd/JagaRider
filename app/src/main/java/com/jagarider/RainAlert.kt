@@ -64,6 +64,7 @@ object RainAlert {
     /** Di thread latar. Pulangkan true kalau semakan berjaya (ada lokasi + data). */
     fun check(ctx: Context): Boolean {
         I18n.lang = Prefs.lang(ctx)
+        Clock.h24 = Prefs.clock24(ctx)
         // Lokasi live kalau dibenarkan "sepanjang masa", kalau tak lokasi terakhir semasa app dibuka
         liveLocation(ctx)?.let { Prefs.setLastLocation(ctx, it.first, it.second) }
         val (lat, lon) = Prefs.lastLocation(ctx) ?: return false
@@ -163,7 +164,7 @@ object RainAlert {
                 parts += t("Hujan ~$d $dir ($l).", "Rain ~$d $dir ($l).", "${dir}约${d}有雨（${l}）。", "$dir ~$d மழை ($l).")
             }
             soonMmh >= 0.1 -> {
-                val at = me.nextTimes.firstOrNull().orEmpty()
+                val at = Clock.hm(me.nextTimes.firstOrNull().orEmpty())
                 parts += t("Hujan dijangka di lokasi anda ~$at.", "Rain expected at your location ~$at.", "预计约${at}您所在位置下雨。", "~$at உங்கள் இடத்தில் மழை எதிர்பார்க்கப்படுகிறது.")
             }
         }
@@ -179,6 +180,7 @@ object RainAlert {
     /** Notifikasi ujian dari skrin Tetapan — dengar bunyi tanpa tunggu hujan. */
     fun test(ctx: Context, level: Int) {
         I18n.lang = Prefs.lang(ctx)
+        Clock.h24 = Prefs.clock24(ctx)
         notify(
             ctx, level,
             if (level == STORM) t("Ujian: bunyi hujan lebat + guruh.", "Test: heavy rain + thunder sound.", "测试：大雨 + 雷声。", "சோதனை: கனமழை + இடி ஒலி.")

@@ -26,8 +26,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 /** Skrin utama: status hujan live di lokasi rider + peta taburan hujan dalam jarak dipilih + ramalan. */
@@ -394,8 +392,8 @@ class MainActivity : BaseActivity() {
         val anyThunder = samples.any { it.thunder } && (scan == null || (scan.heaviest?.mmh ?: 0.0) >= 4.0)
         val thunderNear = samples.any { it.thunder && it.point.distKm <= 50.0 } && (scan == null || (scan.heaviestNear?.mmh ?: 0.0) >= 4.0)
 
-        statusText.text = t("Dikemas kini ", "Updated ", "更新于 ", "புதுப்பிக்கப்பட்டது ") + SimpleDateFormat("HH:mm", Locale.US).format(Date()) +
-            (scan?.let { " · 📡 radar " + SimpleDateFormat("HH:mm", Locale.US).format(Date(it.frame.time)) } ?: "")
+        statusText.text = t("Dikemas kini ", "Updated ", "更新于 ", "புதுப்பிக்கப்பட்டது ") + Clock.time(System.currentTimeMillis()) +
+            (scan?.let { " · 📡 radar " + Clock.time(it.frame.time) } ?: "")
         map.radarFrame = scan?.frame ?: Radar.current()
         levelText.text = emoji(center) + " " + level.label
         levelText.setTextColor(if (level == Weather.Level.NONE) pal.text else level.color)
@@ -407,11 +405,12 @@ class MainActivity : BaseActivity() {
         map.set(samples, range)
         val peninsula = range == Weather.PENINSULA
         val rainy = around.filter { it.mmh >= 0.1 && (peninsula || it.point.distKm <= range * 1.01) }
-        // Hujan terdekat / paling lebat: dari piksel radar kalau ada, kalau tak dari grid model
+        // Hujan terdekat / paling lebat: ikut sumber yang sama dengan peta (radar bila zum dekat, model bila jauh)
+        val mapRadar = scan != null && Radar.shownFor(range)
         fun hit(s: Weather.Sample) = Radar.Hit(s.point.distKm, s.point.bearing, s.mmh)
-        val nearest = if (scan != null) scan.nearest else
+        val nearest = if (mapRadar) scan!!.nearest else
             rainy.minWithOrNull(compareBy<Weather.Sample> { it.point.distKm }.thenByDescending { it.mmh })?.let(::hit)
-        val heaviest = if (scan != null) scan.heaviest else rainy.maxByOrNull { it.mmh }?.let(::hit)
+        val heaviest = if (mapRadar) scan!!.heaviest else rainy.maxByOrNull { it.mmh }?.let(::hit)
         val km = "$range km"
         nearestText.text = buildString {
             when {
@@ -459,12 +458,12 @@ class MainActivity : BaseActivity() {
                         "அடுத்த 2 மணி நேரத்தில் மழை எதிர்பார்க்கப்படவில்லை.",
                     )
             center.mmh < 0.1 -> {
-                val at = center.nextTimes[firstWet]
+                val at = Clock.hm(center.nextTimes[firstWet])
                 val l = Weather.Level.of(center.nextMmh[firstWet]).label
                 "🌧️ " + t("Hujan dijangka mula ~$at ($l).", "Rain expected from ~$at ($l).", "预计约${at}开始下雨（${l}）。", "~$at முதல் மழை எதிர்பார்க்கப்படுகிறது ($l).")
             }
             firstDry >= 0 -> {
-                val at = center.nextTimes[firstDry]
+                val at = Clock.hm(center.nextTimes[firstDry])
                 "🌤️ " + t("Hujan dijangka reda ~$at.", "Rain expected to ease ~$at.", "预计约${at}雨停。", "~$at அளவில் மழை குறையும்.")
             }
             else -> "🌧️ " + t(
@@ -551,7 +550,7 @@ class MainActivity : BaseActivity() {
                 gravity = Gravity.CENTER
                 setPadding(0, dp(1), 0, dp(1))
             }
-            cell.addView(line(h.time, 12f, pal.sub))
+            cell.addView(line(Clock.hour(h.time), 12f, pal.sub))
             cell.addView(line(Weather.icon(h.code, h.time), 26f, pal.text))
             cell.addView(line(if (h.tempC.isNaN()) "—" else String.format(Locale.US, "%.0f°", h.tempC), 15f, pal.text, bold = true))
             val probColor = when {
@@ -570,7 +569,7 @@ class MainActivity : BaseActivity() {
         hourText.text = when {
             hours.isEmpty() -> ""
             storm != null -> {
-                val at = storm.time
+                val at = Clock.hm(storm.time)
                 "⛈️ " + t(
                     "Ribut petir dijangka ~$at — elak ride waktu tu.",
                     "Thunderstorm expected ~$at — avoid riding then.",
@@ -579,7 +578,7 @@ class MainActivity : BaseActivity() {
                 )
             }
             wet != null -> {
-                val at = wet.time
+                val at = Clock.hm(wet.time)
                 val p = wet.prob
                 "☔ " + t(
                     "Peluang hujan tinggi mulai ~$at ($p%) — gerak awal atau bawa baju hujan.",

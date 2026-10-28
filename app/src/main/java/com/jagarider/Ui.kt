@@ -52,9 +52,12 @@ abstract class BaseActivity : Activity() {
     protected lateinit var pal: Palette
     private var appliedLang: Lang? = null
     private var appliedDark: Boolean? = null
+    private var appliedClock: Boolean? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         I18n.lang = Prefs.lang(this)
+        Clock.h24 = Prefs.clock24(this)
+        appliedClock = Clock.h24
         pal = Ui.palette(this)
         appliedLang = I18n.lang
         appliedDark = pal.dark
@@ -65,7 +68,8 @@ abstract class BaseActivity : Activity() {
     override fun onResume() {
         super.onResume()
         I18n.lang = Prefs.lang(this)
-        if (I18n.lang != appliedLang || Ui.isDark(this) != appliedDark) recreate()
+        Clock.h24 = Prefs.clock24(this)
+        if (I18n.lang != appliedLang || Ui.isDark(this) != appliedDark || Clock.h24 != appliedClock) recreate()
     }
 
     /** Selepas setContentView: latar, edge-to-edge (targetSdk 36) dan warna ikon status bar. */

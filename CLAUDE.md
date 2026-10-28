@@ -75,5 +75,9 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   `scan()` walks every z7 pixel (~1.2 km) in the area → centre (≤1.5 px), nearest, heaviest, heaviest ≤ 50 km.
 - Main screen + rain alerts use radar for current rain/nearest/verdict; Open-Meteo stays for forecasts and
   is the fallback when radar fails. Model thunderstorm codes only count when radar shows ≥ 4 mm/h.
-- Map draws radar tiles (`MapTiles.radar`, memory-only cache, z7 stretched) with a chip to toggle
-  📡 Radar ⇄ 🔮 model overlay. Attribution: RainViewer on map + About.
+- Map layer switches automatically (no toggle, v2.0): range ≤ 50 km → radar tiles (`MapTiles.radar`, memory-only,
+  z7 stretched) — same source as status/alerts; ≥ 100 km / Peninsula → model overlay (`Radar.shownFor`). The
+  nearest/heaviest text follows the map source; a non-clickable label on the map names the source.
+  Attribution: RainViewer on map + About.
+- Clock: `Clock` (I18n.kt) formats every displayed time 12h/24h (`Prefs.clock24`, default = phone setting);
+  API times stay "HH:mm" internally — format only at display (`Clock.hm`, `Clock.hour`, `Clock.time`).

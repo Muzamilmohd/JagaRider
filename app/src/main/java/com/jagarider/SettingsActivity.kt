@@ -146,6 +146,20 @@ class SettingsActivity : BaseActivity() {
                 recreate()
             }
         )
+        // Format jam
+        themeCard.addView(label("🕒 " + t("Format jam", "Clock format", "时间格式", "நேர வடிவம்"), 14f, bold = true, color = pal.sub), lp(top = 8))
+        themeCard.addView(
+            radios(
+                listOf(
+                    t("24 jam", "24-hour", "24小时制", "24 மணி") + " (14:30)",
+                    t("12 jam", "12-hour", "12小时制", "12 மணி") + " (2:30 PM)",
+                ),
+                if (Prefs.clock24(this)) 0 else 1,
+            ) { i ->
+                Prefs.setClock24(this, i == 0)
+                recreate()
+            }
+        )
 
         // Amaran hujan
         col.addView(header(t("Amaran hujan", "Rain alerts", "降雨提醒", "மழை எச்சரிக்கை")))

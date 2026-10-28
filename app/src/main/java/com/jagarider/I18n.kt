@@ -28,3 +28,28 @@ fun t(ms: String, en: String, zh: String, ta: String): String = when (I18n.lang)
     Lang.ZH -> zh
     Lang.TA -> ta
 }
+
+/** Format jam 12 / 24 jam (Tetapan → Paparan; lalai ikut telefon). */
+object Clock {
+    @Volatile
+    var h24: Boolean = true
+
+    /** "14:15" (dari API) → "14:15" atau "2:15 PM". */
+    fun hm(s: String): String {
+        if (h24) return s
+        val h = s.substringBefore(':').toIntOrNull() ?: return s
+        val m = s.substringAfter(':', "00").take(2)
+        return "${if (h % 12 == 0) 12 else h % 12}:$m ${if (h < 12) "AM" else "PM"}"
+    }
+
+    /** Jam penuh untuk jalur ramalan: "14:00" atau "2 PM". */
+    fun hour(s: String): String {
+        if (h24) return s
+        val h = s.substringBefore(':').toIntOrNull() ?: return s
+        return "${if (h % 12 == 0) 12 else h % 12} ${if (h < 12) "AM" else "PM"}"
+    }
+
+    /** Masa dari milisaat. */
+    fun time(millis: Long): String =
+        hm(java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date(millis)))
+}

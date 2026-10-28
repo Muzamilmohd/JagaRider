@@ -22,6 +22,13 @@ object Prefs {
         sp(c).edit().putString("theme", theme).apply()
     }
 
+    /** Format jam 24 jam? Lalai ikut tetapan telefon. */
+    fun clock24(c: Context): Boolean =
+        if (sp(c).contains("clock24")) sp(c).getBoolean("clock24", true) else android.text.format.DateFormat.is24HourFormat(c)
+    fun setClock24(c: Context, on: Boolean) {
+        sp(c).edit().putBoolean("clock24", on).apply()
+    }
+
     /** Jarak semakan hujan sekeliling rider (km). */
     fun rangeKm(c: Context): Int = sp(c).getInt("range_km", 10)
     fun setRangeKm(c: Context, km: Int) {

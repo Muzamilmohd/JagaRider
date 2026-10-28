@@ -49,6 +49,9 @@ object Radar {
         val heaviestNear: Hit?,  // paling lebat dalam 50 km (untuk keputusan ride)
     )
 
+    /** Peta guna radar bila zum dekat (≤ 50 km); zum jauh / Semenanjung guna taburan ramalan model. */
+    fun shownFor(rangeSetting: Int) = rangeSetting != Weather.PENINSULA && rangeSetting <= 50
+
     @Volatile private var frame: Frame? = null
     @Volatile private var frameAt = 0L
     private val tiles = LruCache<String, Bitmap>(24)
