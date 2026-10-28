@@ -152,7 +152,17 @@ class RiderPage(private val act: MainActivity) {
         // Peta rider + radar hujan
         val mc = act.card()
         col.addView(mc, act.lp(top = 12))
-        map = RainMapView(act).also { mc.addView(it) }
+        map = RainMapView(act).also {
+            it.interactive = true
+            it.onResetView = { render() }
+            mc.addView(it)
+        }
+        mc.addView(act.label("🤏 " + t(
+            "Dua jari: cubit untuk zum / seret untuk gerak · ketik dua kali: muat semua rider",
+            "Two fingers: pinch to zoom / drag to move · double-tap: fit all riders",
+            "双指：缩放 / 拖动 · 双击：显示所有骑手",
+            "இரு விரல்: பெரிதாக்க / நகர்த்த · இருமுறை தட்டு: அனைவரையும் காட்டு",
+        ), 12f, color = act.pal.sub).apply { gravity = Gravity.CENTER })
         list = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
         mc.addView(list, act.lp(top = 8))
         render()
@@ -194,12 +204,12 @@ class RiderPage(private val act: MainActivity) {
         val mine = riders.firstOrNull { it.me }
         val (myLat, myLon) = mine?.let { it.lat to it.lon } ?: Prefs.lastLocation(act) ?: (3.95 to 102.0)
         val others = riders.filter { !it.me }
-        // Zum supaya semua rider muat dalam peta
+        // Zum automatik supaya semua rider muat (sedekat 0.5 km bila rider berdekatan)
         val far = others.maxOfOrNull { distKm(myLat, myLon, it.lat, it.lon) } ?: 0.0
-        val range = listOf(5, 10, 25, 50, 100, 200, 300).firstOrNull { it >= far * 1.15 } ?: Weather.PENINSULA
+        val km = maxOf(0.5, far * 1.3)
         m.radarFrame = Radar.current()
         m.riders = others
-        m.setCenter(myLat, myLon, range)
+        m.fitRiders(myLat, myLon, km)
 
         l.removeAllViews()
         if (riders.isEmpty()) {

@@ -97,5 +97,7 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
 - Rules: `firebase/database.rules.json` (paste into console → Realtime Database → Rules → Publish).
 - `LocationShareService`: foreground service (type location) started only by the user's "Start sharing" button;
   GPS/network updates every 5 s, uploads every ≥10 s; Stop in app or notification removes my entry.
-- RiderPage polls `groups/{gid}/m` every 8 s while visible; map = `RainMapView.setCenter` + `riders` markers,
+- RiderPage polls `groups/{gid}/m` every 8 s while visible; map = `RainMapView.fitRiders` (auto-fit ≥ 0.5 km) + `riders` markers.
+  `interactive` map: two fingers = pinch zoom (0.15–400 km) + pan, one finger scrolls the page, double-tap re-fits;
+  after a manual zoom/pan, refreshes keep the view (`userView`).
   auto-zoom to fit; hides riders idle > 2 h, greys > 5 min.

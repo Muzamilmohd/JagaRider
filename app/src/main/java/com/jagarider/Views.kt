@@ -11,9 +11,14 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.os.SystemClock
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import java.util.Locale
 import kotlin.math.PI
+import kotlin.math.atan
+import kotlin.math.sinh
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.ln
@@ -77,6 +82,81 @@ class RainMapView(ctx: Context) : View(ctx) {
         riderLat = lat
         riderLon = lon
         preview(rangeSetting)
+    }
+
+    // ------------------------------------------------------------ peta rider: zum & gerak
+
+    /** Tab Rider: cubit untuk zum, seret untuk gerak, ketik dua kali untuk kembali muat semua rider. */
+    var interactive = false
+    /** Dipanggil bila pengguna ketik dua kali (kembali ke zum automatik). */
+    var onResetView: (() -> Unit)? = null
+    /** true selepas pengguna zum / seret — data baru tak ubah pandangan sehingga ketik dua kali. */
+    private var userView = false
+
+    /** Tab Rider: pusat pada saya, zum muat semua rider (kecuali pengguna dah zum / gerak sendiri). */
+    fun fitRiders(lat: Double, lon: Double, km: Double) {
+        riderLat = lat
+        riderLon = lon
+        if (!userView) {
+            centerLat = lat
+            centerLon = lon
+            viewKm = km
+            setting = km.toInt().coerceAtLeast(1)
+        }
+        invalidate()
+    }
+
+    // Dua jari = zum + gerak peta; satu jari = skrol halaman (macam Google Maps dalam senarai)
+    private var lastFx = 0f
+    private var lastFy = 0f
+
+    private val scaler = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
+            lastFx = d.focusX
+            lastFy = d.focusY
+            return true
+        }
+
+        override fun onScale(d: ScaleGestureDetector): Boolean {
+            panBy(lastFx - d.focusX, lastFy - d.focusY)
+            lastFx = d.focusX
+            lastFy = d.focusY
+            viewKm = (viewKm / d.scaleFactor).coerceIn(0.15, 400.0)
+            setting = viewKm.toInt().coerceAtLeast(1) // radar bila ≤ 50 km
+            userView = true
+            invalidate()
+            return true
+        }
+    })
+
+    private fun panBy(dx: Float, dy: Float) {
+        if (world == 0.0 || centerLat.isNaN()) return
+        val nx = mercX(centerLon) * world + dx / scale
+        val ny = mercY(centerLat) * world + dy / scale
+        centerLon = nx / world * 360.0 - 180.0
+        centerLat = Math.toDegrees(atan(sinh(PI * (1 - 2 * ny / world))))
+    }
+
+    private val gestures = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(e: MotionEvent) = true
+
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            userView = false
+            onResetView?.invoke()
+            return true
+        }
+    })
+
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (!interactive) return false
+        // Jari kedua turun = peta ambil alih (halaman berhenti skrol)
+        if (e.actionMasked == MotionEvent.ACTION_POINTER_DOWN) parent?.requestDisallowInterceptTouchEvent(true)
+        scaler.onTouchEvent(e)
+        if (e.pointerCount == 1) gestures.onTouchEvent(e)
+        if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) {
+            parent?.requestDisallowInterceptTouchEvent(false)
+        }
+        return true
     }
 
     /** Data baru: sampel pertama = lokasi rider. */
@@ -215,7 +295,7 @@ class RainMapView(ctx: Context) : View(ctx) {
         // zum jauh (≥ 100 km / Semenanjung) = taburan ramalan model untuk rancang ride jauh
         val radar = frame != null && Radar.shownFor(setting)
         c.save()
-        if (aroundRider) {
+        if (aroundRider && !interactive) {
             ring.reset()
             ring.addCircle(rx, ry, radiusPx, Path.Direction.CW)
             c.clipPath(ring)
@@ -249,7 +329,12 @@ class RainMapView(ctx: Context) : View(ctx) {
             for (s in samples) if (s.thunder) c.drawText("⚡", sx(s.point.lon), sy(s.point.lat) + dp(6f), text)
         }
 
-        if (aroundRider) {
+        if (interactive) {
+            // Peta rider: tiada bulatan — tunjuk lebar peta sebagai skala
+            val widthKm = viewKm * 2 * 1.15
+            val scaleText = if (widthKm < 1.0) "↔ ${(Math.round(widthKm * 20) * 50)} m" else "↔ " + Weather.formatKm(Math.round(widthKm * 10) / 10.0)
+            label(c, scaleText, w / 2, dp(22f))
+        } else if (aroundRider) {
             // Bulatan jarak
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = dp(2f)
