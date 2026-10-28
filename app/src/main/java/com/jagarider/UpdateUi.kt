@@ -37,7 +37,7 @@ object UpdateUi {
             .setTitle(t("Versi baru ${rel.version}", "New version ${rel.version}", "新版本 ${rel.version}", "புதிய பதிப்பு ${rel.version}"))
             .setMessage(
                 Updater.shortNotes(rel.notes).ifBlank {
-                    t("Ada kemas kini untuk JagaRider.", "An update for JagaRider is available.", "JagaRider 有可用更新。", "JagaRider-க்கு புதுப்பிப்பு உள்ளது.")
+                    t("Ada kemas kini untuk JagaRide.", "An update for JagaRide is available.", "JagaRide 有可用更新。", "JagaRide-க்கு புதுப்பிப்பு உள்ளது.")
                 }
             )
             .setPositiveButton(t("Kemas kini", "Update", "更新", "புதுப்பி")) { _, _ -> install(act, rel, status) }
@@ -50,10 +50,10 @@ object UpdateUi {
             Toast.makeText(
                 act,
                 t(
-                    "Benarkan JagaRider pasang app, kemudian tekan Kemas kini sekali lagi",
-                    "Allow JagaRider to install apps, then tap Update again",
-                    "请允许 JagaRider 安装应用，然后再点一次更新",
-                    "ஆப்களை நிறுவ JagaRider-ஐ அனுமதித்து, மீண்டும் புதுப்பி அழுத்தவும்",
+                    "Benarkan JagaRide pasang app, kemudian tekan Kemas kini sekali lagi",
+                    "Allow JagaRide to install apps, then tap Update again",
+                    "请允许 JagaRide 安装应用，然后再点一次更新",
+                    "ஆப்களை நிறுவ JagaRide-ஐ அனுமதித்து, மீண்டும் புதுப்பி அழுத்தவும்",
                 ),
                 Toast.LENGTH_LONG,
             ).show()

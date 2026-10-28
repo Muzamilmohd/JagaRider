@@ -43,17 +43,31 @@ object Weather {
     /** Ramalan satu jam: masa "HH:mm", kod cuaca, suhu, peluang hujan (%), hujan (mm/jam). */
     data class Hour(val time: String, val code: Int, val tempC: Double, val prob: Int, val mmh: Double)
 
-    /** Saiz grid titik semakan (GRID × GRID) untuk peta taburan hujan. */
-    const val GRID = 7
+    /** Nilai khas jarak: seluruh Semenanjung Malaysia. */
+    const val PENINSULA = 999
 
-    /** Titik semakan: arah (darjah dari utara), jarak dari rider, dan kedudukan dalam grid (baris 0 = utara). */
+    /**
+     * Kawasan semakan: pusat grid, separuh lebar (km), saiz grid n × n, dan sama ada berpusat pada rider
+     * (bulatan jarak) atau kawasan tetap (Semenanjung). Grid lebih besar untuk kawasan luas.
+     */
+    data class Area(val lat: Double, val lon: Double, val halfKm: Double, val n: Int, val aroundRider: Boolean)
+
+    fun area(riderLat: Double, riderLon: Double, rangeKm: Int): Area = when {
+        // Perlis (6.7°U) – Johor (1.3°U), 99.6°T – 104.4°T
+        rangeKm == PENINSULA -> Area(3.95, 102.0, 310.0, 11, aroundRider = false)
+        rangeKm <= 25 -> Area(riderLat, riderLon, rangeKm.toDouble(), 7, aroundRider = true)
+        rangeKm <= 100 -> Area(riderLat, riderLon, rangeKm.toDouble(), 9, aroundRider = true)
+        else -> Area(riderLat, riderLon, rangeKm.toDouble(), 11, aroundRider = true)
+    }
+
+    /** Titik semakan: arah (darjah dari utara) & jarak dari rider, kedudukan dalam grid (baris 0 = utara; -1 = luar grid). */
     data class Point(
         val lat: Double,
         val lon: Double,
         val bearing: Double,
         val distKm: Double,
-        val row: Int = GRID / 2,
-        val col: Int = GRID / 2,
+        val row: Int,
+        val col: Int,
     )
 
     data class Sample(
@@ -71,22 +85,27 @@ object Weather {
     }
 
     /**
-     * Grid GRID × GRID meliputi segi empat ±jarak dari rider (49 titik).
-     * Titik tengah (lokasi rider) diletak pertama dalam senarai.
+     * Grid n × n meliputi kawasan. Lokasi rider sentiasa pertama dalam senarai (status & ramalan).
+     * Bila kawasan berpusat pada rider, titik tengah grid ialah rider sendiri.
      */
-    fun points(lat: Double, lon: Double, rangeKm: Double): List<Point> {
-        val half = GRID / 2
-        val step = rangeKm / half
+    fun points(riderLat: Double, riderLon: Double, a: Area): List<Point> {
+        val half = a.n / 2
+        val step = a.halfKm / half
         val kmPerDegLat = 111.32
-        val kmPerDegLon = 111.32 * cos(Math.toRadians(lat))
-        val list = mutableListOf(Point(lat, lon, 0.0, 0.0, half, half))
-        for (r in 0 until GRID) for (c in 0 until GRID) {
-            if (r == half && c == half) continue
-            val east = (c - half) * step
-            val north = (half - r) * step
+        val kmPerDegLon = 111.32 * cos(Math.toRadians(a.lat))
+        val list = mutableListOf(
+            if (a.aroundRider) Point(riderLat, riderLon, 0.0, 0.0, half, half) else Point(riderLat, riderLon, 0.0, 0.0, -1, -1)
+        )
+        for (r in 0 until a.n) for (c in 0 until a.n) {
+            if (a.aroundRider && r == half && c == half) continue
+            val lat = a.lat + (half - r) * step / kmPerDegLat
+            val lon = a.lon + (c - half) * step / kmPerDegLon
+            // arah & jarak dari rider (anggaran rata — cukup tepat untuk < 700 km)
+            val north = (lat - riderLat) * kmPerDegLat
+            val east = (lon - riderLon) * 111.32 * cos(Math.toRadians((lat + riderLat) / 2))
             list += Point(
-                lat = lat + north / kmPerDegLat,
-                lon = lon + east / kmPerDegLon,
+                lat = lat,
+                lon = lon,
                 bearing = (Math.toDegrees(atan2(east, north)) + 360) % 360,
                 distKm = hypot(east, north),
                 row = r,
@@ -106,7 +125,7 @@ object Weather {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = 15_000
-        conn.setRequestProperty("User-Agent", "JagaRider")
+        conn.setRequestProperty("User-Agent", "JagaRide")
         val text = try {
             val ok = conn.responseCode == 200
             val body = (if (ok) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()

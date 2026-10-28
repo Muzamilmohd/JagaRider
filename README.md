@@ -1,9 +1,9 @@
-# 🏍️ JagaRider
+# 🏍️ JagaRide
 
 Semak hujan sebelum ride (Android 8.0+).
 
 - **Tahap hujan live** di lokasi anda: Tiada hujan → Renyai → Ringan → Sederhana → Lebat → Sangat lebat (mm/jam)
-- **Peta hujan** 5 / 10 / 25 / 50 km: taburan hujan dilukis atas peta (OpenStreetMap), arah & jarak hujan terdekat, ribut petir ⚡
+- **Peta hujan** dengan slider 5 km hingga seluruh Semenanjung Malaysia (rancang ride jauh): taburan hujan dilukis atas peta (OpenStreetMap), arah & jarak hujan terdekat, ribut petir ⚡
 - **Ramalan 2 jam** setiap 15 minit dengan ikon cuaca: bila hujan dijangka mula / reda
 - **Ramalan 6 jam**: ikon, suhu & peluang hujan (%) setiap jam — jam berpeluang hujan tinggi diserlahkan
 - Keputusan ringkas: 🟢 Cuaca baik untuk ride / 🟡 / 🟠 / 🔴 Tangguh dulu
@@ -12,9 +12,9 @@ Semak hujan sebelum ride (Android 8.0+).
 - **Kemas kini sendiri** dari GitHub Releases (semak setiap hari, boleh dimatikan)
 
 ## Cara pasang
-1. Muat turun fail `JagaRider-v*.apk` dari [Releases](https://github.com/Muzamilmohd/JagaRider/releases/latest).
+1. Muat turun fail `JagaRide-v*.apk` dari [Releases](https://github.com/Muzamilmohd/JagaRider/releases/latest).
 2. Buka fail tu dan benarkan "Pasang app tidak diketahui" bila diminta.
-3. Benarkan akses lokasi supaya app boleh semak hujan di sekeliling anda.
+3. Benarkan akses lokasi supaya JagaRide boleh semak hujan di sekeliling anda.
 
 ## Privasi
 Lokasi hanya digunakan semasa app dibuka. Koordinat titik semakan dihantar ke `api.open-meteo.com`

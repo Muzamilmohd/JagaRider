@@ -1,7 +1,11 @@
-# JagaRider
+# JagaRide
+
+Display name **JagaRide** (renamed from JagaRider in v1.5). The package/applicationId stays `com.jagarider`
+(changing it would make Android treat it as a new app and break OTA updates), as do the repo name
+`Muzamilmohd/JagaRider`, source folder and keystore file names.
 
 Android app (Kotlin, no external libraries) for motorcycle riders to check rain before a ride: live rain
-intensity at their location, a map of rain distribution within a chosen range (5/10/25/50 km), a 2-hour forecast, and
+intensity at their location, a map of rain distribution within a slider-chosen range (5–300 km or all of Peninsular Malaysia), a 2-hour forecast, and
 OTA self-update from GitHub Releases. Developer credit: Mohd Muzamil (Settings → About + main screen footer).
 
 UI text in 4 languages, default **Bahasa Melayu**, selectable in Settings: Melayu / English / 中文 / தமிழ்
@@ -10,11 +14,12 @@ always fill all four. In Kotlin templates next to Chinese/Tamil text use `${name
 Light/dark/follow-system theme (`Prefs.theme`): colours come from `Palette` (Ui.kt); views read
 `Ui.palette(ctx)`; the map gets an invert + hue-rotate ColorMatrix in dark mode. Activities extend
 `BaseActivity` (Ui.kt), which applies language + theme before `onCreate` and `recreate()`s on change.
-Package/applicationId `com.jagarider` — never change it (breaks OTA updates).
 
 ## Files
-- `Weather.kt` – Open-Meteo client (no API key). One request for a 7×7 grid (49 points) spanning ±range
-  around the rider; centre point first in the list, each `Point` has `row`/`col`. `current.precipitation` / `minutely_15` are mm per 15 min → ×4 = mm/h.
+- `Weather.kt` – Open-Meteo client (no API key). Range slider stops 5–300 km + `PENINSULA` (999 = whole
+  Peninsular Malaysia, fixed area centred 3.95°N 102°E). `area()` picks grid size 7/9/11 by range; one request for
+  the grid. Rider point always first in the list (row/col = -1 when outside the grid, i.e. Peninsula mode).
+  Bigger areas refresh less often (5/10/15 min) to stay within the Open-Meteo free limit. `current.precipitation` / `minutely_15` are mm per 15 min → ×4 = mm/h.
   `Level` thresholds (mm/h): 0.1 Renyai, 1 Ringan, 4 Sederhana, 10 Lebat, 30 Sangat lebat.
 - `MapTiles.kt` – OSM tile loader (memory LRU + 7-day file cache in cacheDir/tiles, max 2 connections,
   proper User-Agent — OSM tile usage policy; never bulk-prefetch).
@@ -46,6 +51,6 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
 - Release key: `jagarider-release.jks` + `keystore.properties` (gitignored, **must be backed up**). Every OTA
   APK must be signed with it, otherwise install fails (signature mismatch).
 - To release: bump `versionCode` + `versionName` in `app/build.gradle.kts`, `./gradlew assembleRelease`,
-  copy `app/build/outputs/apk/release/app-release.apk` to `dist/JagaRider-v<ver>.apk`, then
-  `gh release create v<ver> dist/JagaRider-v<ver>.apk --repo Muzamilmohd/JagaRider --notes "..."`.
+  copy `app/build/outputs/apk/release/app-release.apk` to `dist/JagaRide-v<ver>.apk`, then
+  `gh release create v<ver> dist/JagaRide-v<ver>.apk --repo Muzamilmohd/JagaRider --notes "..."`.
   Tag must be `v` + versionName. Notes above a "## Cara pasang" heading are shown in the update dialog.

@@ -31,9 +31,13 @@ private fun alpha(color: Int, a: Int) = Color.argb(a, Color.red(color), Color.gr
  */
 class RainMapView(ctx: Context) : View(ctx) {
 
-    var rangeKm = 10.0
-        set(v) { field = v; invalidate() }
+    /** Separuh lebar kawasan yang dipapar (km) — bulatan jarak bila berpusat pada rider. */
+    private var viewKm = 10.0
+    private var setting = 10           // pilihan slider (km atau Weather.PENINSULA)
+    private var aroundRider = true
 
+    private var riderLat = Double.NaN
+    private var riderLon = Double.NaN
     private var centerLat = Double.NaN
     private var centerLon = Double.NaN
     private var samples: List<Weather.Sample> = emptyList()
@@ -58,13 +62,27 @@ class RainMapView(ctx: Context) : View(ctx) {
     private var cx = 0.0
     private var cy = 0.0
 
-    fun set(samples: List<Weather.Sample>, rangeKm: Double) {
-        val c = samples.firstOrNull() ?: return
-        centerLat = c.point.lat
-        centerLon = c.point.lon
+    /** Data baru: sampel pertama = lokasi rider. */
+    fun set(samples: List<Weather.Sample>, rangeSetting: Int) {
+        val r = samples.firstOrNull() ?: return
+        riderLat = r.point.lat
+        riderLon = r.point.lon
         this.samples = samples
-        this.rangeKm = rangeKm
         buildOverlay()
+        preview(rangeSetting)
+    }
+
+    /** Tukar zum / kawasan serta-merta (semasa slider ditarik), sebelum data baru tiba. */
+    fun preview(rangeSetting: Int) {
+        setting = rangeSetting
+        if (!riderLat.isNaN()) {
+            val a = Weather.area(riderLat, riderLon, rangeSetting)
+            centerLat = a.lat
+            centerLon = a.lon
+            aroundRider = a.aroundRider
+            // Semenanjung: muatkan Perlis–Johor dalam peta segi empat
+            viewKm = if (a.aroundRider) a.halfKm else 300.0
+        }
         invalidate()
     }
 
@@ -75,11 +93,16 @@ class RainMapView(ctx: Context) : View(ctx) {
 
     /** Interpolasi grid mm/jam → bitmap kecil berwarna ikut tahap (lutsinar bila tiada hujan). */
     private fun buildOverlay() {
-        val n = Weather.GRID
+        val inGrid = samples.filter { it.point.row >= 0 }
+        val n = (inGrid.maxOfOrNull { it.point.row } ?: -1) + 1
+        if (n < 2) {
+            overlay = null
+            return
+        }
         val grid = Array(n) { DoubleArray(n) }
         var nw: Weather.Point? = null
         var se: Weather.Point? = null
-        for (s in samples) {
+        for (s in inGrid) {
             grid[s.point.row][s.point.col] = s.mmh
             if (s.point.row == 0 && s.point.col == 0) nw = s.point
             if (s.point.row == n - 1 && s.point.col == n - 1) se = s.point
@@ -99,7 +122,9 @@ class RainMapView(ctx: Context) : View(ctx) {
             val fy = gy - y0
             val v = grid[y0][x0] * (1 - fx) * (1 - fy) + grid[y0][x0 + 1] * fx * (1 - fy) +
                 grid[y0 + 1][x0] * (1 - fx) * fy + grid[y0 + 1][x0 + 1] * fx * fy
-            px[y * m + x] = if (v < 0.1) Color.TRANSPARENT else alpha(Weather.Level.of(v).color, 165)
+            // pudar di tepi grid supaya tak nampak sempadan segi empat
+            val edge = (minOf(x, y, m - 1 - x, m - 1 - y) / (m * 0.08)).coerceAtMost(1.0)
+            px[y * m + x] = if (v < 0.1) Color.TRANSPARENT else alpha(Weather.Level.of(v).color, (165 * edge).toInt())
         }
         overlay = Bitmap.createBitmap(px, m, m, Bitmap.Config.ARGB_8888)
         overlayNW = nw.lat to nw.lon
@@ -135,7 +160,7 @@ class RainMapView(ctx: Context) : View(ctx) {
 
         // Zum: jarak semakan ≈ 87% separuh lebar peta
         val radiusPx = w / 2 / 1.15f
-        val kmPerPx = rangeKm / radiusPx
+        val kmPerPx = viewKm / radiusPx
         val kmPerWorldPxZ0 = 40075.016 * cos(Math.toRadians(centerLat)) / 256.0
         val zf = ln(kmPerWorldPxZ0 / kmPerPx) / ln(2.0)
         val z = floor(zf).toInt().coerceIn(2, 18)
@@ -164,12 +189,17 @@ class RainMapView(ctx: Context) : View(ctx) {
             }
         }
 
-        // Taburan hujan — dipotong ikut bulatan jarak (grid segi empat, tepinya tak cantik)
+        val rx = sx(riderLon)
+        val ry = sy(riderLat)
+
+        // Taburan hujan — sekeliling rider dipotong ikut bulatan jarak (tepi grid segi empat tak cantik)
         overlay?.let {
             c.save()
-            ring.reset()
-            ring.addCircle(w / 2, h / 2, radiusPx, Path.Direction.CW)
-            c.clipPath(ring)
+            if (aroundRider) {
+                ring.reset()
+                ring.addCircle(rx, ry, radiusPx, Path.Direction.CW)
+                c.clipPath(ring)
+            }
             rect.set(sx(overlayNW.second), sy(overlayNW.first), sx(overlaySE.second), sy(overlaySE.first))
             c.drawBitmap(it, null, rect, bmpPaint)
             c.restore()
@@ -178,24 +208,28 @@ class RainMapView(ctx: Context) : View(ctx) {
         text.textSize = dp(16f)
         for (s in samples) if (s.thunder) c.drawText("⚡", sx(s.point.lon), sy(s.point.lat) + dp(6f), text)
 
-        // Bulatan jarak
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = dp(2f)
-        paint.color = alpha(pal.text, 170)
-        paint.pathEffect = DashPathEffect(floatArrayOf(dp(8f), dp(6f)), 0f)
-        c.drawCircle(w / 2, h / 2, radiusPx, paint)
-        paint.pathEffect = null
-        label(c, Weather.formatKm(rangeKm), w / 2, h / 2 - radiusPx + dp(4f))
+        if (aroundRider) {
+            // Bulatan jarak
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = dp(2f)
+            paint.color = alpha(pal.text, 170)
+            paint.pathEffect = DashPathEffect(floatArrayOf(dp(8f), dp(6f)), 0f)
+            c.drawCircle(rx, ry, radiusPx, paint)
+            paint.pathEffect = null
+            label(c, Weather.formatKm(viewKm), rx, ry - radiusPx + dp(4f))
+        } else {
+            label(c, "🇲🇾 " + t("Semenanjung Malaysia", "Peninsular Malaysia", "马来西亚半岛", "தீபகற்ப மலேசியா"), w / 2, dp(22f))
+        }
 
         // Rider (berdenyut = live)
         val t = (SystemClock.uptimeMillis() % 1600L) / 1600f
         paint.style = Paint.Style.FILL
         paint.color = alpha(Color.parseColor("#FF6F00"), ((1 - t) * 140).toInt())
-        c.drawCircle(w / 2, h / 2, dp(9f + 20f * t), paint)
+        c.drawCircle(rx, ry, dp(9f + 20f * t), paint)
         paint.color = Color.WHITE
-        c.drawCircle(w / 2, h / 2, dp(10f), paint)
+        c.drawCircle(rx, ry, dp(10f), paint)
         paint.color = Color.parseColor("#FF6F00")
-        c.drawCircle(w / 2, h / 2, dp(7.5f), paint)
+        c.drawCircle(rx, ry, dp(7.5f), paint)
 
         // Utara + atribusi (wajib untuk OSM)
         label(c, "▲ " + t("U", "N", "北", "வ"), dp(26f), dp(22f))

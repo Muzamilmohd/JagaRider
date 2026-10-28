@@ -94,7 +94,7 @@ class SettingsActivity : BaseActivity() {
         val about = card().apply { gravity = Gravity.CENTER_HORIZONTAL }
         col.addView(about, lp(top = 8))
         about.addView(ImageView(this).apply { setImageResource(R.drawable.ic_launcher) }, LinearLayout.LayoutParams(dp(72), dp(72)))
-        about.addView(label("JagaRider v${BuildConfig.VERSION_NAME}", 20f, bold = true, color = pal.orange).apply { gravity = Gravity.CENTER })
+        about.addView(label("JagaRide v${BuildConfig.VERSION_NAME}", 20f, bold = true, color = pal.orange).apply { gravity = Gravity.CENTER })
         about.addView(label(t("Semak hujan sebelum ride", "Check the rain before you ride", "出发前查看降雨", "பயணத்திற்கு முன் மழையைச் சரிபார்க்கவும்"), 14f, color = pal.sub).apply { gravity = Gravity.CENTER })
         about.addView(label(t("Dibangunkan oleh", "Developed by", "开发者", "உருவாக்கியவர்"), 13f, color = pal.sub).apply {
             gravity = Gravity.CENTER

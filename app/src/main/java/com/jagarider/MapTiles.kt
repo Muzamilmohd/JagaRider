@@ -59,7 +59,7 @@ object MapTiles {
         val conn = URL("https://tile.openstreetmap.org/$key.png").openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = 15_000
-        conn.setRequestProperty("User-Agent", "JagaRider/${BuildConfig.VERSION_NAME} (+https://github.com/Muzamilmohd/JagaRider)")
+        conn.setRequestProperty("User-Agent", "JagaRide/${BuildConfig.VERSION_NAME} (+https://github.com/Muzamilmohd/JagaRider)")
         try {
             if (conn.responseCode != 200) return null
             val bytes = conn.inputStream.use { it.readBytes() }

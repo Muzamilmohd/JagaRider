@@ -55,7 +55,7 @@ object Updater {
         conn.connectTimeout = 15_000
         conn.readTimeout = 15_000
         conn.setRequestProperty("Accept", "application/vnd.github+json")
-        conn.setRequestProperty("User-Agent", "JagaRider")
+        conn.setRequestProperty("User-Agent", "JagaRide")
         try {
             if (conn.responseCode == 404) return null // belum ada release
             if (conn.responseCode != 200) throw IllegalStateException("GitHub HTTP ${conn.responseCode}")
@@ -110,7 +110,7 @@ object Updater {
         return false
     }
 
-    /** Boleh pasang APK? Kalau belum, pengguna perlu benarkan "Pasang app tidak diketahui" untuk JagaRider. */
+    /** Boleh pasang APK? Kalau belum, pengguna perlu benarkan "Pasang app tidak diketahui" untuk JagaRide. */
     fun canInstall(ctx: Context): Boolean = ctx.packageManager.canRequestPackageInstalls()
 
     /** Muat turun APK terus ke PackageInstaller — Android akan tanya pengesahan pengguna. */
@@ -127,7 +127,7 @@ object Updater {
                     val conn = URL(rel.apkUrl).openConnection() as HttpURLConnection
                     conn.connectTimeout = 15_000
                     conn.readTimeout = 30_000
-                    conn.setRequestProperty("User-Agent", "JagaRider")
+                    conn.setRequestProperty("User-Agent", "JagaRide")
                     try {
                         val total = if (rel.size > 0) rel.size else conn.contentLengthLong
                         conn.inputStream.use { input ->
@@ -197,7 +197,7 @@ object Updater {
         if (Prefs.notifiedVersion(ctx) == rel.version) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CH, t("Kemas kini JagaRider", "JagaRider updates", "JagaRider 更新", "JagaRider புதுப்பிப்புகள்"), NotificationManager.IMPORTANCE_DEFAULT)
+            NotificationChannel(CH, t("Kemas kini JagaRide", "JagaRide updates", "JagaRide 更新", "JagaRide புதுப்பிப்புகள்"), NotificationManager.IMPORTANCE_DEFAULT)
         )
         val pi = PendingIntent.getActivity(
             ctx, 1,
@@ -208,7 +208,7 @@ object Updater {
         )
         val n = Notification.Builder(ctx, CH)
             .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle(t("Versi baru JagaRider ${rel.version}", "New JagaRider version ${rel.version}", "JagaRider 新版本 ${rel.version}", "JagaRider புதிய பதிப்பு ${rel.version}"))
+            .setContentTitle(t("Versi baru JagaRide ${rel.version}", "New JagaRide version ${rel.version}", "JagaRide 新版本 ${rel.version}", "JagaRide புதிய பதிப்பு ${rel.version}"))
             .setContentText(t("Tekan untuk kemas kini", "Tap to update", "点击更新", "புதுப்பிக்கத் தட்டவும்"))
             .setContentIntent(pi)
             .setAutoCancel(true)

@@ -44,7 +44,7 @@ object Ui {
 }
 
 /**
- * Asas skrin JagaRider: pasang bahasa + tema sebelum UI dibina, dan bina semula skrin
+ * Asas skrin JagaRide: pasang bahasa + tema sebelum UI dibina, dan bina semula skrin
  * bila bahasa / tema ditukar di skrin Tetapan.
  */
 abstract class BaseActivity : Activity() {

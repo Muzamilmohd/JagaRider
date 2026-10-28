@@ -6,6 +6,7 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.location.Location
@@ -23,6 +24,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,12 +42,12 @@ class MainActivity : BaseActivity() {
     private lateinit var verdictText: TextView
     private lateinit var map: RainMapView
     private lateinit var nearestText: TextView
+    private lateinit var rangeText: TextView
     private lateinit var chart: RainChartView
     private lateinit var forecastText: TextView
     private lateinit var hourRow: LinearLayout
     private lateinit var hourText: TextView
     private lateinit var locationBtn: Button
-    private val rangeButtons = mutableMapOf<Int, Button>()
 
     private var lastLocation: Location? = null
     private var lastRefresh = 0L
@@ -55,7 +57,7 @@ class MainActivity : BaseActivity() {
     private val autoRefresh = object : Runnable {
         override fun run() {
             refresh()
-            main.postDelayed(this, REFRESH_MS)
+            main.postDelayed(this, refreshMs())
         }
     }
 
@@ -77,7 +79,7 @@ class MainActivity : BaseActivity() {
             addView(LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(12), 0, 0, 0)
-                addView(label("JagaRider", 26f, bold = true, color = pal.orange).apply { setPadding(0, 0, 0, 0) })
+                addView(label("JagaRide", 26f, bold = true, color = pal.orange).apply { setPadding(0, 0, 0, 0) })
                 addView(label(t("Semak hujan sebelum ride", "Check the rain before you ride", "出发前查看降雨", "பயணத்திற்கு முன் மழையைச் சரிபார்க்கவும்"), 14f, color = pal.sub).apply { setPadding(0, 0, 0, 0) })
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(label("⚙️", 24f).apply {
@@ -123,21 +125,45 @@ class MainActivity : BaseActivity() {
         card.addView(locationBtn, lp(top = 8))
 
         // Jarak + peta hujan
-        col.addView(header(t("Jarak semakan", "Check radius", "检查范围", "சரிபார்ப்பு தூரம்")))
-        col.addView(LinearLayout(this).apply {
-            for (km in RANGES) {
-                val b = pill("$km km") { selectRange(km) }
-                rangeButtons[km] = b
-                addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(3), 0, dp(3), 0) })
-            }
-        })
         val mapCard = card()
-        col.addView(mapCard, lp(top = 8))
-        map = RainMapView(this).apply { rangeKm = Prefs.rangeKm(this@MainActivity).toDouble() }
-        mapCard.addView(map)
+        col.addView(mapCard, lp(top = 14))
+        val saved = Prefs.rangeKm(this)
+        val start = RANGES.indexOf(saved).takeIf { it >= 0 } ?: RANGES.indexOfFirst { it >= saved }.coerceAtLeast(0)
+        mapCard.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label(t("Jarak semakan", "Check radius", "检查范围", "சரிபார்ப்பு தூரம்"), 17f, bold = true),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            rangeText = label(rangeName(RANGES[start]), 17f, bold = true, color = pal.orange)
+            addView(rangeText)
+        })
+        mapCard.addView(SeekBar(this).apply {
+            max = RANGES.size - 1
+            progress = start
+            val tint = ColorStateList.valueOf(pal.orange)
+            progressTintList = tint
+            thumbTintList = tint
+            tickMark = null
+            setPadding(dp(4), dp(10), dp(4), dp(10))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                    rangeText.text = rangeName(RANGES[p])
+                    map.preview(RANGES[p])
+                }
+
+                override fun onStartTrackingTouch(sb: SeekBar) {}
+
+                // Ambil data hanya bila jari dilepas — jimat permintaan
+                override fun onStopTrackingTouch(sb: SeekBar) = selectRange(RANGES[sb.progress])
+            })
+        }, lp(top = 4))
+        mapCard.addView(LinearLayout(this).apply {
+            addView(label("${RANGES.first()} km", 12f, color = pal.sub), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(label("🇲🇾 " + t("Semenanjung", "Peninsula", "半岛", "தீபகற்பம்"), 12f, color = pal.sub))
+        })
+        map = RainMapView(this).apply { preview(RANGES[start]) }
+        mapCard.addView(map, lp(top = 6))
         nearestText = label("", 15f)
         mapCard.addView(nearestText, lp(top = 6))
-        styleRangeButtons()
 
         // Ramalan 2 jam
         col.addView(header(t("2 jam akan datang (lokasi anda)", "Next 2 hours (your location)", "未来2小时（您的位置）", "அடுத்த 2 மணி நேரம் (உங்கள் இடம்)")))
@@ -168,7 +194,7 @@ class MainActivity : BaseActivity() {
             ),
             13f, color = pal.sub,
         ).apply { gravity = Gravity.CENTER })
-        col.addView(label("JagaRider v${BuildConfig.VERSION_NAME} · " + t("Dibangunkan oleh", "Developed by", "开发者：", "உருவாக்கியவர்") + " Mohd Muzamil", 12f, color = pal.sub).apply {
+        col.addView(label("JagaRide v${BuildConfig.VERSION_NAME} · " + t("Dibangunkan oleh", "Developed by", "开发者：", "உருவாக்கியவர்") + " Mohd Muzamil", 12f, color = pal.sub).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(20), 0, 0)
         })
@@ -188,7 +214,7 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        val wait = (REFRESH_MS - (System.currentTimeMillis() - lastRefresh)).coerceAtLeast(0)
+        val wait = (refreshMs() - (System.currentTimeMillis() - lastRefresh)).coerceAtLeast(0)
         main.postDelayed(autoRefresh, if (lastRefresh == 0L) 0 else wait)
     }
 
@@ -229,10 +255,10 @@ class MainActivity : BaseActivity() {
         if (!hasLocationPermission()) {
             showLocationProblem(
                 t(
-                    "JagaRider perlu kebenaran lokasi untuk semak hujan di sekeliling anda.",
-                    "JagaRider needs location permission to check the rain around you.",
-                    "JagaRider 需要位置权限来查看您周围的降雨。",
-                    "உங்களைச் சுற்றியுள்ள மழையைச் சரிபார்க்க JagaRider-க்கு இருப்பிட அனுமதி தேவை.",
+                    "JagaRide perlu kebenaran lokasi untuk semak hujan di sekeliling anda.",
+                    "JagaRide needs location permission to check the rain around you.",
+                    "JagaRide 需要位置权限来查看您周围的降雨。",
+                    "உங்களைச் சுற்றியுள்ள மழையைச் சரிபார்க்க JagaRide-க்கு இருப்பிட அனுமதி தேவை.",
                 ),
                 t("Beri kebenaran lokasi", "Allow location", "允许定位", "இருப்பிட அனுமதி வழங்கவும்"),
             )
@@ -325,8 +351,8 @@ class MainActivity : BaseActivity() {
     private fun fetchWeather(loc: Location) {
         loading = true
         statusText.text = checking()
-        val range = Prefs.rangeKm(this).toDouble()
-        val points = Weather.points(loc.latitude, loc.longitude, range)
+        val range = Prefs.rangeKm(this)
+        val points = Weather.points(loc.latitude, loc.longitude, Weather.area(loc.latitude, loc.longitude, range))
         Thread {
             val result = runCatching { Weather.fetch(points) }
             main.post {
@@ -342,11 +368,12 @@ class MainActivity : BaseActivity() {
         }.start()
     }
 
-    private fun render(samples: List<Weather.Sample>, range: Double) {
+    private fun render(samples: List<Weather.Sample>, range: Int) {
         val center = samples.first()
         val around = samples.drop(1)
         val level = center.level
         val anyThunder = samples.any { it.thunder }
+        val thunderNear = samples.any { it.thunder && it.point.distKm <= 50.0 }
 
         statusText.text = t("Dikemas kini ", "Updated ", "更新于 ", "புதுப்பிக்கப்பட்டது ") + SimpleDateFormat("HH:mm", Locale.US).format(Date())
         levelText.text = emoji(center) + " " + level.label
@@ -357,14 +384,18 @@ class MainActivity : BaseActivity() {
 
         // Kawasan sekeliling
         map.set(samples, range)
-        val rainy = around.filter { it.mmh >= 0.1 && it.point.distKm <= range * 1.01 }
+        val peninsula = range == Weather.PENINSULA
+        val rainy = around.filter { it.mmh >= 0.1 && (peninsula || it.point.distKm <= range * 1.01) }
         val nearest = rainy.minWithOrNull(compareBy<Weather.Sample> { it.point.distKm }.thenByDescending { it.mmh })
         val heaviest = rainy.maxByOrNull { it.mmh }
-        val km = Weather.formatKm(range)
+        val km = "$range km"
         nearestText.text = buildString {
             when {
                 nearest == null && center.mmh < 0.1 ->
-                    append(t("✅ Tiada hujan dalam $km.", "✅ No rain within $km.", "✅ ${km}内无雨。", "✅ ${km}-க்குள் மழை இல்லை."))
+                    append(
+                        if (peninsula) t("✅ Tiada hujan di Semenanjung Malaysia.", "✅ No rain across Peninsular Malaysia.", "✅ 马来西亚半岛无雨。", "✅ தீபகற்ப மலேசியாவில் மழை இல்லை.")
+                        else t("✅ Tiada hujan dalam $km.", "✅ No rain within $km.", "✅ ${km}内无雨。", "✅ ${km}-க்குள் மழை இல்லை.")
+                    )
                 nearest == null ->
                     append(
                         t(
@@ -422,7 +453,9 @@ class MainActivity : BaseActivity() {
 
         // Keputusan ride
         val maxNext = center.nextMmh.maxOrNull() ?: 0.0
-        val worstAround = rainy.maxOfOrNull { it.mmh } ?: 0.0
+        // Keputusan ride hanya ambil kira hujan berdekatan (≤ 50 km), bukan yang jauh di peta
+        val worstAround = rainy.filter { it.point.distKm <= 50.0 }.maxOfOrNull { it.mmh } ?: 0.0
+        val rainNear = rainy.any { it.point.distKm <= 50.0 }
         val (msg, color) = when {
             level >= Weather.Level.MODERATE || center.thunder -> t(
                 "🔴 Tangguh dulu — hujan lebat / ribut di lokasi anda",
@@ -436,13 +469,13 @@ class MainActivity : BaseActivity() {
                 "🟠 正在下雨——穿雨衣，慢慢骑",
                 "🟠 மழை பெய்கிறது — மழைக்கோட் அணிந்து மெதுவாகச் செல்லவும்",
             ) to "#EF6C00"
-            anyThunder || worstAround >= 4.0 || maxNext >= 4.0 -> t(
+            thunderNear || worstAround >= 4.0 || maxNext >= 4.0 -> t(
                 "🟠 Hati-hati — hujan lebat berdekatan / akan datang",
                 "🟠 Careful — heavy rain nearby / coming",
                 "🟠 小心——附近有大雨/即将下大雨",
                 "🟠 கவனம் — அருகில் / விரைவில் கனமழை",
             ) to "#EF6C00"
-            rainy.isNotEmpty() || maxNext >= 0.1 -> t(
+            rainNear || maxNext >= 0.1 -> t(
                 "🟡 Ada hujan berdekatan — bawa baju hujan",
                 "🟡 Rain nearby — bring a raincoat",
                 "🟡 附近有雨——带上雨衣",
@@ -557,22 +590,26 @@ class MainActivity : BaseActivity() {
     }
 
     private fun selectRange(km: Int) {
+        if (km == Prefs.rangeKm(this) && lastRefresh != 0L) return
         Prefs.setRangeKm(this, km)
-        map.rangeKm = km.toDouble()
-        styleRangeButtons()
+        map.preview(km)
         val loc = lastLocation
         if (loc != null && !loading) fetchWeather(loc) else refresh(force = true)
     }
 
-    private fun styleRangeButtons() {
-        val sel = Prefs.rangeKm(this)
-        for ((km, b) in rangeButtons) stylePill(b, primary = km == sel)
+    private fun rangeName(km: Int) =
+        if (km == Weather.PENINSULA) "🇲🇾 " + t("Semenanjung", "Peninsula", "半岛", "தீபகற்பம்") else "$km km"
+
+    /** Kawasan luas = lebih banyak titik, jadi muat semula kurang kerap (had percuma Open-Meteo). */
+    private fun refreshMs(): Long = when (Prefs.rangeKm(this)) {
+        in 0..25 -> 5 * 60_000L
+        in 26..100 -> 10 * 60_000L
+        else -> 15 * 60_000L
     }
 
     companion object {
         const val EXTRA_CHECK_UPDATE = "check_update"
         private const val REQ_PERMS = 1
-        private const val REFRESH_MS = 5 * 60_000L
-        private val RANGES = listOf(5, 10, 25, 50)
+        private val RANGES = listOf(5, 10, 25, 50, 100, 200, 300, Weather.PENINSULA)
     }
 }
