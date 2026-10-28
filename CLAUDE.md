@@ -1,15 +1,19 @@
 # JagaRider
 
 Android app (Kotlin, no external libraries) for motorcycle riders to check rain before a ride: live rain
-intensity at their location, a radar of rain within a chosen range (5/10/25/50 km), a 2-hour forecast, and
+intensity at their location, a map of rain distribution within a chosen range (5/10/25/50 km), a 2-hour forecast, and
 OTA self-update from GitHub Releases. UI text in Bahasa Melayu.
 Package/applicationId `com.jagarider` — never change it (breaks OTA updates).
 
 ## Files
-- `Weather.kt` – Open-Meteo client (no API key). One request for 17 points: rider + 8 compass directions at
-  half and full range. `current.precipitation` / `minutely_15` are mm per 15 min → ×4 = mm/h.
+- `Weather.kt` – Open-Meteo client (no API key). One request for a 7×7 grid (49 points) spanning ±range
+  around the rider; centre point first in the list, each `Point` has `row`/`col`. `current.precipitation` / `minutely_15` are mm per 15 min → ×4 = mm/h.
   `Level` thresholds (mm/h): 0.1 Renyai, 1 Ringan, 4 Sederhana, 10 Lebat, 30 Sangat lebat.
-- `Views.kt` – Canvas views: `RadarView` (rain blobs + animated sweep), `LevelBarView`, `RainChartView`.
+- `MapTiles.kt` – OSM tile loader (memory LRU + 7-day file cache in cacheDir/tiles, max 2 connections,
+  proper User-Agent — OSM tile usage policy; never bulk-prefetch).
+- `Views.kt` – Canvas views: `RainMapView` (OSM tiles, zoom fitted to range, grid bilinearly interpolated
+  into a coloured overlay clipped to the range circle, pulsing rider marker, attribution), `LevelBarView`,
+  `RainChartView`.
 - `MainActivity.kt` – main screen (code-built UI): location (LocationManager, no Play services), verdict
   (🟢/🟡/🟠/🔴), auto-refresh every 5 min while resumed, "Kemas kini app" section.
 - `Updater.kt` – checks `https://api.github.com/repos/<jagarider.updateRepo>/releases/latest` (repo in
