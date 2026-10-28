@@ -355,15 +355,18 @@ class MainActivity : BaseActivity() {
         loading = true
         statusText.text = checking()
         val range = Prefs.rangeKm(this)
-        val points = Weather.points(loc.latitude, loc.longitude, Weather.area(loc.latitude, loc.longitude, range))
+        val area = Weather.area(loc.latitude, loc.longitude, range)
+        val points = Weather.points(loc.latitude, loc.longitude, area)
         Thread {
             val result = runCatching { Weather.fetch(points) }
+            // Radar sebenar untuk "sekarang" — kalau gagal, guna ramalan model sahaja
+            val scan = runCatching { Radar.scan(loc.latitude, loc.longitude, area) }.getOrNull()
             main.post {
                 loading = false
                 if (isDestroyed) return@post
                 result.onSuccess {
                     lastRefresh = System.currentTimeMillis()
-                    render(it, range)
+                    render(it, range, scan)
                 }.onFailure {
                     statusText.text = t("Gagal (internet?): ", "Failed (internet?): ", "失败（网络？）：", "தோல்வி (இணையம்?): ") + it.message
                 }
@@ -371,14 +374,29 @@ class MainActivity : BaseActivity() {
         }.start()
     }
 
-    private fun render(samples: List<Weather.Sample>, range: Int) {
-        val center = samples.first()
+    private fun render(samples: List<Weather.Sample>, range: Int, scan: Radar.Scan?) {
+        val model = samples.first()
+        // Hujan sekarang di lokasi rider: radar sebenar kalau ada, kalau tak ramalan model.
+        // Kod cuaca diselaraskan supaya ikon / teks tak bercanggah dengan radar.
+        val center = if (scan == null) model else {
+            val r = scan.centerMmh
+            val code = when {
+                r >= 0.1 && model.code < 51 -> if (r < 1.0) 51 else 61
+                r < 0.1 && model.code >= 51 -> 3
+                model.code >= 95 && r < 1.0 -> 61
+                else -> model.code
+            }
+            model.copy(mmh = r, code = code)
+        }
         val around = samples.drop(1)
         val level = center.level
-        val anyThunder = samples.any { it.thunder }
-        val thunderNear = samples.any { it.thunder && it.point.distKm <= 50.0 }
+        // Ribut petir (model) hanya dipercayai bila radar pun nampak hujan lebat
+        val anyThunder = samples.any { it.thunder } && (scan == null || (scan.heaviest?.mmh ?: 0.0) >= 4.0)
+        val thunderNear = samples.any { it.thunder && it.point.distKm <= 50.0 } && (scan == null || (scan.heaviestNear?.mmh ?: 0.0) >= 4.0)
 
-        statusText.text = t("Dikemas kini ", "Updated ", "更新于 ", "புதுப்பிக்கப்பட்டது ") + SimpleDateFormat("HH:mm", Locale.US).format(Date())
+        statusText.text = t("Dikemas kini ", "Updated ", "更新于 ", "புதுப்பிக்கப்பட்டது ") + SimpleDateFormat("HH:mm", Locale.US).format(Date()) +
+            (scan?.let { " · 📡 radar " + SimpleDateFormat("HH:mm", Locale.US).format(Date(it.frame.time)) } ?: "")
+        map.radarFrame = scan?.frame ?: Radar.current()
         levelText.text = emoji(center) + " " + level.label
         levelText.setTextColor(if (level == Weather.Level.NONE) pal.text else level.color)
         val temp = if (center.tempC.isNaN()) "" else String.format(Locale.US, " · %.0f°C", center.tempC)
@@ -389,8 +407,11 @@ class MainActivity : BaseActivity() {
         map.set(samples, range)
         val peninsula = range == Weather.PENINSULA
         val rainy = around.filter { it.mmh >= 0.1 && (peninsula || it.point.distKm <= range * 1.01) }
-        val nearest = rainy.minWithOrNull(compareBy<Weather.Sample> { it.point.distKm }.thenByDescending { it.mmh })
-        val heaviest = rainy.maxByOrNull { it.mmh }
+        // Hujan terdekat / paling lebat: dari piksel radar kalau ada, kalau tak dari grid model
+        fun hit(s: Weather.Sample) = Radar.Hit(s.point.distKm, s.point.bearing, s.mmh)
+        val nearest = if (scan != null) scan.nearest else
+            rainy.minWithOrNull(compareBy<Weather.Sample> { it.point.distKm }.thenByDescending { it.mmh })?.let(::hit)
+        val heaviest = if (scan != null) scan.heaviest else rainy.maxByOrNull { it.mmh }?.let(::hit)
         val km = "$range km"
         nearestText.text = buildString {
             when {
@@ -457,8 +478,9 @@ class MainActivity : BaseActivity() {
         // Keputusan ride
         val maxNext = center.nextMmh.maxOrNull() ?: 0.0
         // Keputusan ride hanya ambil kira hujan berdekatan (≤ 50 km), bukan yang jauh di peta
-        val worstAround = rainy.filter { it.point.distKm <= 50.0 }.maxOfOrNull { it.mmh } ?: 0.0
-        val rainNear = rainy.any { it.point.distKm <= 50.0 }
+        val worstAround = if (scan != null) scan.heaviestNear?.mmh ?: 0.0
+            else rainy.filter { it.point.distKm <= 50.0 }.maxOfOrNull { it.mmh } ?: 0.0
+        val rainNear = worstAround >= 0.1
         val (msg, color) = when {
             level >= Weather.Level.MODERATE || center.thunder -> t(
                 "🔴 Tangguh dulu — hujan lebat / ribut di lokasi anda",
@@ -500,9 +522,9 @@ class MainActivity : BaseActivity() {
     }
 
     /** "Hujan terdekat: ~12.5 km arah Timur Laut (Renyai)" dalam bahasa semasa. */
-    private fun rainAt(what: String, s: Weather.Sample): String {
-        val d = Weather.formatKm(s.point.distKm)
-        val dir = Weather.toward(s.point.bearing)
+    private fun rainAt(what: String, s: Radar.Hit): String {
+        val d = Weather.formatKm(s.distKm)
+        val dir = Weather.toward(s.bearing)
         val l = s.level.label
         return t("$what: ~$d $dir ($l)", "$what: ~$d $dir ($l)", "${what}：${dir}约${d}（${l}）", "$what: $dir ~$d ($l)")
     }

@@ -2,7 +2,7 @@
 
 Semak hujan sebelum ride (Android 8.0+).
 
-- **Tahap hujan live** di lokasi anda: Tiada hujan → Renyai → Ringan → Sederhana → Lebat → Sangat lebat (mm/jam)
+- **Radar hujan sebenar** (RainViewer) untuk hujan sekarang — tahap hujan live di lokasi anda: Tiada hujan → Renyai → Ringan → Sederhana → Lebat → Sangat lebat (mm/jam)
 - **Peta hujan** dengan slider 5 km hingga seluruh Semenanjung Malaysia (rancang ride jauh): taburan hujan dilukis atas peta (OpenStreetMap), arah & jarak hujan terdekat, ribut petir ⚡
 - **Ramalan 2 jam** setiap 15 minit dengan ikon cuaca: bila hujan dijangka mula / reda
 - **Ramalan 6 jam**: ikon, suhu & peluang hujan (%) setiap jam — jam berpeluang hujan tinggi diserlahkan
@@ -19,10 +19,10 @@ Semak hujan sebelum ride (Android 8.0+).
 
 ## Privasi
 Lokasi digunakan semasa app dibuka, dan di latar untuk amaran hujan hanya jika anda pilih "Benarkan sepanjang masa". Koordinat titik semakan dihantar ke `api.open-meteo.com`
-untuk data cuaca, dan jubin peta kawasan sekitar dimuat turun dari `tile.openstreetmap.org`; app juga
+untuk data cuaca, imej radar dimuat turun dari RainViewer, dan jubin peta kawasan sekitar dimuat turun dari `tile.openstreetmap.org`; app juga
 meminta maklumat release dari `api.github.com`. Tiada data lain dihantar.
 
-Data cuaca: [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0).
+Ramalan cuaca: [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0). Radar hujan: [RainViewer](https://www.rainviewer.com).
 Peta: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors. Ramalan model — bukan jaminan.
 
 Dibangunkan oleh **Muzamil Mohd**.

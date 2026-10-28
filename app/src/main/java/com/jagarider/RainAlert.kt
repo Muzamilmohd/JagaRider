@@ -72,15 +72,31 @@ object RainAlert {
         val area = Weather.Area(lat, lon, km.toDouble(), 5, aroundRider = true)
         val samples = runCatching { Weather.fetch(Weather.points(lat, lon, area)) }.getOrNull() ?: return false
         val me = samples.first()
+        // Hujan SEKARANG dari radar sebenar kalau ada; kalau radar gagal, guna grid model
+        val scan = runCatching { Radar.scan(lat, lon, area) }.getOrNull()
+        val centerMmh: Double
+        val near: Radar.Hit?
+        val heaviest: Radar.Hit?
+        if (scan != null) {
+            centerMmh = scan.centerMmh
+            near = scan.nearest
+            heaviest = scan.heaviest
+        } else {
+            val rain = samples.filter { it.mmh >= 0.1 && it.point.distKm <= km * 1.01 }
+                .map { Radar.Hit(it.point.distKm, it.point.bearing, it.mmh) }
+            centerMmh = me.mmh
+            near = rain.minByOrNull { it.distKm }
+            heaviest = rain.maxByOrNull { it.mmh }
+        }
 
-        // Hujan sekarang dalam kawasan, atau dijangka di lokasi rider dalam 30 minit
-        val nowRain = samples.filter { it.mmh >= 0.1 && it.point.distKm <= km * 1.01 }
+        // Hujan sekarang dalam kawasan, atau dijangka di lokasi rider dalam 30 minit (ramalan)
         val soonMmh = me.nextMmh.take(2).maxOrNull() ?: 0.0
-        val worst = maxOf(nowRain.maxOfOrNull { it.mmh } ?: 0.0, soonMmh)
-        val thunder = samples.any { it.thunder && it.point.distKm <= km * 1.01 }
+        val worst = maxOf(heaviest?.mmh ?: 0.0, soonMmh)
+        // Ribut petir dari model — dipercayai hanya bila radar pun nampak hujan agak lebat
+        val thunder = samples.any { it.thunder && it.point.distKm <= km * 1.01 } && (scan == null || (heaviest?.mmh ?: 0.0) >= 4.0)
         val level = when {
             thunder || worst >= Weather.Level.HEAVY.min -> STORM
-            nowRain.isNotEmpty() || soonMmh >= 0.1 -> RAIN
+            near != null || soonMmh >= 0.1 -> RAIN
             else -> NONE
         }
 
@@ -92,7 +108,7 @@ object RainAlert {
         }
         // Amaran bila hujan baru bermula, bertambah lebat, atau masih berterusan selepas 2 jam
         if (level > last || since > REPEAT_MS) {
-            val msg = message(me, nowRain, soonMmh, thunder, km)
+            val msg = message(centerMmh, near, heaviest, me, soonMmh, thunder, km)
             notify(ctx, level, msg)
             Prefs.setAlertState(ctx, level, System.currentTimeMillis())
         } else {
@@ -133,18 +149,16 @@ object RainAlert {
         }
     }
 
-    private fun message(me: Weather.Sample, nowRain: List<Weather.Sample>, soonMmh: Double, thunder: Boolean, km: Int): String {
-        val near = nowRain.filter { it !== me }.minByOrNull { it.point.distKm }
-        val heaviest = nowRain.maxByOrNull { it.mmh }
+    private fun message(centerMmh: Double, near: Radar.Hit?, heaviest: Radar.Hit?, me: Weather.Sample, soonMmh: Double, thunder: Boolean, km: Int): String {
         val parts = mutableListOf<String>()
         when {
-            me.mmh >= 0.1 -> {
-                val l = me.level.label
+            centerMmh >= 0.1 -> {
+                val l = Weather.Level.of(centerMmh).label
                 parts += t("Sedang hujan di lokasi anda ($l).", "Raining at your location ($l).", "您所在位置正在下雨（${l}）。", "உங்கள் இடத்தில் மழை பெய்கிறது ($l).")
             }
             near != null -> {
-                val d = Weather.formatKm(near.point.distKm)
-                val dir = Weather.toward(near.point.bearing)
+                val d = Weather.formatKm(near.distKm)
+                val dir = Weather.toward(near.bearing)
                 val l = near.level.label
                 parts += t("Hujan ~$d $dir ($l).", "Rain ~$d $dir ($l).", "${dir}约${d}有雨（${l}）。", "$dir ~$d மழை ($l).")
             }

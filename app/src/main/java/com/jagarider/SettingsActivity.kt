@@ -240,10 +240,10 @@ class SettingsActivity : BaseActivity() {
         about.addView(
             label(
                 t(
-                    "Data cuaca: Open-Meteo.com (CC BY 4.0)\nPeta: © OpenStreetMap contributors\nRamalan model — bukan jaminan.",
-                    "Weather data: Open-Meteo.com (CC BY 4.0)\nMap: © OpenStreetMap contributors\nModel forecast — not a guarantee.",
-                    "天气数据：Open-Meteo.com（CC BY 4.0）\n地图：© OpenStreetMap contributors\n模型预报，仅供参考。",
-                    "வானிலை தரவு: Open-Meteo.com (CC BY 4.0)\nவரைபடம்: © OpenStreetMap contributors\nமாதிரி முன்னறிவிப்பு — உத்தரவாதம் அல்ல.",
+                    "Ramalan cuaca: Open-Meteo.com (CC BY 4.0)\nRadar hujan: RainViewer.com\nPeta: © OpenStreetMap contributors\nRamalan model — bukan jaminan.",
+                    "Weather forecast: Open-Meteo.com (CC BY 4.0)\nRain radar: RainViewer.com\nMap: © OpenStreetMap contributors\nModel forecast — not a guarantee.",
+                    "天气预报：Open-Meteo.com（CC BY 4.0）\n降雨雷达：RainViewer.com\n地图：© OpenStreetMap contributors\n模型预报，仅供参考。",
+                    "வானிலை முன்னறிவிப்பு: Open-Meteo.com (CC BY 4.0)\nமழை ரேடார்: RainViewer.com\nவரைபடம்: © OpenStreetMap contributors\nமாதிரி முன்னறிவிப்பு — உத்தரவாதம் அல்ல.",
                 ),
                 12f, color = pal.sub,
             ).apply {

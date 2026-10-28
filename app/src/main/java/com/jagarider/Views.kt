@@ -11,7 +11,10 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
@@ -61,6 +64,33 @@ class RainMapView(ctx: Context) : View(ctx) {
     private var scale = 1f
     private var cx = 0.0
     private var cy = 0.0
+
+    /** Frame radar RainViewer (null = tiada radar, guna ramalan model). */
+    var radarFrame: Radar.Frame? = null
+        set(v) { field = v; invalidate() }
+    /** true = lapisan radar sebenar, false = taburan ramalan model. Ditukar dengan butang pada peta. */
+    var showRadar = true
+    private val radarPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply { alpha = 215 }
+    private val chipRect = RectF()
+
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        val inChip = chipRect.contains(e.x, e.y)
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> return inChip
+            MotionEvent.ACTION_UP -> if (inChip) {
+                performClick()
+                return true
+            }
+        }
+        return false
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        showRadar = !showRadar
+        invalidate()
+        return true
+    }
 
     /** Data baru: sampel pertama = lokasi rider. */
     fun set(samples: List<Weather.Sample>, rangeSetting: Int) {
@@ -193,20 +223,42 @@ class RainMapView(ctx: Context) : View(ctx) {
         val ry = sy(riderLat)
 
         // Taburan hujan — sekeliling rider dipotong ikut bulatan jarak (tepi grid segi empat tak cantik)
-        overlay?.let {
-            c.save()
-            if (aroundRider) {
-                ring.reset()
-                ring.addCircle(rx, ry, radiusPx, Path.Direction.CW)
-                c.clipPath(ring)
-            }
-            rect.set(sx(overlayNW.second), sy(overlayNW.first), sx(overlaySE.second), sy(overlaySE.first))
-            c.drawBitmap(it, null, rect, bmpPaint)
-            c.restore()
+        val frame = radarFrame
+        val radar = showRadar && frame != null
+        c.save()
+        if (aroundRider) {
+            ring.reset()
+            ring.addCircle(rx, ry, radiusPx, Path.Direction.CW)
+            c.clipPath(ring)
         }
-        text.textAlign = Paint.Align.CENTER
-        text.textSize = dp(16f)
-        for (s in samples) if (s.thunder) c.drawText("⚡", sx(s.point.lon), sy(s.point.lat) + dp(6f), text)
+        if (radar) {
+            // Radar sebenar: jubin zum ≤ 7 diregangkan ke zum peta
+            val rz = minOf(z, Radar.ZOOM)
+            val k = 2.0.pow(z - rz) // piksel peta per piksel radar
+            val rn = 1 shl rz
+            val rSize = (256 * k * scale).toFloat()
+            for (ty in floor(top / 256 / k).toInt()..floor((top + h / scale) / 256 / k).toInt()) {
+                if (ty < 0 || ty >= rn) continue
+                for (tx in floor(left / 256 / k).toInt()..floor((left + w / scale) / 256 / k).toInt()) {
+                    val x = ((tx * 256 * k - cx) * scale + w / 2).toFloat()
+                    val y = ((ty * 256 * k - cy) * scale + h / 2).toFloat()
+                    rect.set(x, y, x + rSize, y + rSize)
+                    MapTiles.radar(context, frame!!, rz, Math.floorMod(tx, rn), ty) { invalidate() }
+                        ?.let { c.drawBitmap(it, null, rect, radarPaint) }
+                }
+            }
+        } else {
+            overlay?.let {
+                rect.set(sx(overlayNW.second), sy(overlayNW.first), sx(overlaySE.second), sy(overlaySE.first))
+                c.drawBitmap(it, null, rect, bmpPaint)
+            }
+        }
+        c.restore()
+        if (!radar) {
+            text.textAlign = Paint.Align.CENTER
+            text.textSize = dp(16f)
+            for (s in samples) if (s.thunder) c.drawText("⚡", sx(s.point.lon), sy(s.point.lat) + dp(6f), text)
+        }
 
         if (aroundRider) {
             // Bulatan jarak
@@ -235,12 +287,34 @@ class RainMapView(ctx: Context) : View(ctx) {
         label(c, "▲ " + t("U", "N", "北", "வ"), dp(26f), dp(22f))
         text.textSize = dp(10f)
         text.textAlign = Paint.Align.RIGHT
-        val attr = "© OpenStreetMap · Open-Meteo"
+        val attr = "© OpenStreetMap · " + if (radar) "RainViewer" else "Open-Meteo"
         val aw = text.measureText(attr)
         paint.color = alpha(pal.card, 200)
         c.drawRect(w - aw - dp(8f), h - dp(16f), w, h, paint)
         text.color = pal.sub
         c.drawText(attr, w - dp(4f), h - dp(4.5f), text)
+
+        // Butang tukar lapisan: radar sebenar ↔ ramalan model
+        val chip = if (radar) {
+            "📡 Radar " + SimpleDateFormat("HH:mm", Locale.US).format(Date(frame!!.time)) + "  ⇄"
+        } else {
+            "🔮 " + t("Ramalan model", "Model forecast", "模型预报", "மாதிரி முன்னறிவிப்பு") + "  ⇄"
+        }
+        text.textSize = dp(13f)
+        text.isFakeBoldText = true
+        val cw = text.measureText(chip)
+        chipRect.set(dp(8f), h - dp(52f), dp(8f) + cw + dp(20f), h - dp(20f))
+        paint.color = alpha(pal.card, 235)
+        c.drawRoundRect(chipRect, dp(16f), dp(16f), paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = dp(1.5f)
+        paint.color = pal.orange
+        c.drawRoundRect(chipRect, dp(16f), dp(16f), paint)
+        paint.style = Paint.Style.FILL
+        text.textAlign = Paint.Align.CENTER
+        text.color = pal.text
+        c.drawText(chip, chipRect.centerX(), chipRect.centerY() + dp(4.5f), text)
+        text.isFakeBoldText = false
 
         c.restore()
         postInvalidateDelayed(50)

@@ -66,3 +66,14 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   copy `app/build/outputs/apk/release/app-release.apk` to `dist/JagaRide-v<ver>.apk`, then
   `gh release create v<ver> dist/JagaRide-v<ver>.apk --repo Muzamilmohd/JagaRider --notes "..."`.
   Tag must be `v` + versionName. Notes above a "## Cara pasang" heading are shown in the update dialog.
+
+## Radar (v1.9)
+- `Radar.kt` – RainViewer real radar for "now": `weather-maps.json` → latest `radar.past` frame (10-min). Free API
+  limits: **zoom ≤ 7** (higher returns a "Zoom Level Not Supported" tile) and only the Universal Blue colour
+  scheme. Pixel colour → dBZ by nearest match to the Universal Blue column of
+  `rainviewer_api_colors_table.csv` (dBZ -10..75) → mm/h via Marshall-Palmer; < 12 dBZ = no rain.
+  `scan()` walks every z7 pixel (~1.2 km) in the area → centre (≤1.5 px), nearest, heaviest, heaviest ≤ 50 km.
+- Main screen + rain alerts use radar for current rain/nearest/verdict; Open-Meteo stays for forecasts and
+  is the fallback when radar fails. Model thunderstorm codes only count when radar shows ≥ 4 mm/h.
+- Map draws radar tiles (`MapTiles.radar`, memory-only cache, z7 stretched) with a chip to toggle
+  📡 Radar ⇄ 🔮 model overlay. Attribution: RainViewer on map + About.

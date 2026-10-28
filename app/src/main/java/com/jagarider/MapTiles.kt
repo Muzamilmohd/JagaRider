@@ -30,9 +30,15 @@ object MapTiles {
     private val pool = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
 
-    /** Bitmap jubin kalau sudah ada; kalau belum, mula muat turun dan panggil onReady bila siap. */
-    fun get(ctx: Context, z: Int, x: Int, y: Int, onReady: () -> Unit): Bitmap? {
-        val key = "$z/$x/$y"
+    /** Jubin peta OSM kalau sudah ada; kalau belum, mula muat turun dan panggil onReady bila siap. */
+    fun get(ctx: Context, z: Int, x: Int, y: Int, onReady: () -> Unit): Bitmap? =
+        fetch(ctx, "$z/$x/$y", "https://tile.openstreetmap.org/$z/$x/$y.png", "$z-$x-$y.png", onReady)
+
+    /** Jubin radar RainViewer — memori sahaja (frame bertukar setiap 10 minit). */
+    fun radar(ctx: Context, frame: Radar.Frame, z: Int, x: Int, y: Int, onReady: () -> Unit): Bitmap? =
+        fetch(ctx, "${frame.path}/$z/$x/$y", frame.tileUrl(z, x, y, smooth = true), null, onReady)
+
+    private fun fetch(ctx: Context, key: String, url: String, diskName: String?, onReady: () -> Unit): Bitmap? {
         mem.get(key)?.let { return it }
         if (System.currentTimeMillis() - (failed[key] ?: 0L) < RETRY_MS) return null
         if (!pending.add(key)) return null
@@ -40,11 +46,11 @@ object MapTiles {
         pool.execute {
             var bmp: Bitmap? = null
             try {
-                val f = File(dir, "$z-$x-$y.png")
-                if (f.exists() && System.currentTimeMillis() - f.lastModified() < MAX_AGE) bmp = BitmapFactory.decodeFile(f.path)
-                if (bmp == null) bmp = download(key, f)
+                val f = diskName?.let { File(dir, it) }
+                if (f != null && f.exists() && System.currentTimeMillis() - f.lastModified() < MAX_AGE) bmp = BitmapFactory.decodeFile(f.path)
+                if (bmp == null) bmp = download(url, f)
                 // tiada internet: guna jubin lama pun tak apa
-                if (bmp == null && f.exists()) bmp = BitmapFactory.decodeFile(f.path)
+                if (bmp == null && f != null && f.exists()) bmp = BitmapFactory.decodeFile(f.path)
             } catch (_: Exception) {
             } finally {
                 if (bmp != null) mem.put(key, bmp) else failed[key] = System.currentTimeMillis()
@@ -55,8 +61,8 @@ object MapTiles {
         return null
     }
 
-    private fun download(key: String, f: File): Bitmap? {
-        val conn = URL("https://tile.openstreetmap.org/$key.png").openConnection() as HttpURLConnection
+    private fun download(url: String, f: File?): Bitmap? {
+        val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = 15_000
         conn.setRequestProperty("User-Agent", "JagaRide/${BuildConfig.VERSION_NAME} (+https://github.com/Muzamilmohd/JagaRider)")
@@ -64,8 +70,10 @@ object MapTiles {
             if (conn.responseCode != 200) return null
             val bytes = conn.inputStream.use { it.readBytes() }
             val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
-            f.parentFile?.mkdirs()
-            f.writeBytes(bytes)
+            if (f != null) {
+                f.parentFile?.mkdirs()
+                f.writeBytes(bytes)
+            }
             return bmp
         } finally {
             conn.disconnect()
