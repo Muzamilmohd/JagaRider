@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
@@ -41,6 +43,10 @@ class RainMapView(ctx: Context) : View(ctx) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val pal = Ui.palette(ctx)
+    private val tilePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply {
+        if (pal.dark) colorFilter = ColorMatrixColorFilter(darkMap())
+    }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clip = Path()
     private val ring = Path()
@@ -116,13 +122,13 @@ class RainMapView(ctx: Context) : View(ctx) {
         clip.reset()
         clip.addRoundRect(0f, 0f, w, h, dp(12f), dp(12f), Path.Direction.CW)
         c.clipPath(clip)
-        c.drawColor(Color.parseColor("#E5E3DF"))
+        c.drawColor(pal.mapBg)
 
         if (centerLat.isNaN()) {
-            text.color = Color.parseColor("#607D8B")
+            text.color = pal.sub
             text.textSize = dp(15f)
             text.textAlign = Paint.Align.CENTER
-            c.drawText("Menunggu lokasi…", w / 2, h / 2, text)
+            c.drawText(t("Menunggu lokasi…", "Waiting for location…", "等待位置…", "இருப்பிடத்திற்காகக் காத்திருக்கிறது…"), w / 2, h / 2, text)
             c.restore()
             return
         }
@@ -154,7 +160,7 @@ class RainMapView(ctx: Context) : View(ctx) {
                 val y = ((ty * 256 - cy) * scale + h / 2).toFloat()
                 rect.set(x, y, x + tileSize, y + tileSize)
                 val bmp = MapTiles.get(context, z, Math.floorMod(tx, tiles), ty) { invalidate() }
-                if (bmp != null) c.drawBitmap(bmp, null, rect, bmpPaint)
+                if (bmp != null) c.drawBitmap(bmp, null, rect, tilePaint)
             }
         }
 
@@ -175,7 +181,7 @@ class RainMapView(ctx: Context) : View(ctx) {
         // Bulatan jarak
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = dp(2f)
-        paint.color = alpha(Color.parseColor("#263238"), 170)
+        paint.color = alpha(pal.text, 170)
         paint.pathEffect = DashPathEffect(floatArrayOf(dp(8f), dp(6f)), 0f)
         c.drawCircle(w / 2, h / 2, radiusPx, paint)
         paint.pathEffect = null
@@ -192,14 +198,14 @@ class RainMapView(ctx: Context) : View(ctx) {
         c.drawCircle(w / 2, h / 2, dp(7.5f), paint)
 
         // Utara + atribusi (wajib untuk OSM)
-        label(c, "▲ U", dp(26f), dp(22f))
+        label(c, "▲ " + t("U", "N", "北", "வ"), dp(26f), dp(22f))
         text.textSize = dp(10f)
         text.textAlign = Paint.Align.RIGHT
         val attr = "© OpenStreetMap · Open-Meteo"
         val aw = text.measureText(attr)
-        paint.color = alpha(Color.WHITE, 200)
+        paint.color = alpha(pal.card, 200)
         c.drawRect(w - aw - dp(8f), h - dp(16f), w, h, paint)
-        text.color = Color.parseColor("#37474F")
+        text.color = pal.sub
         c.drawText(attr, w - dp(4f), h - dp(4.5f), text)
 
         c.restore()
@@ -213,10 +219,10 @@ class RainMapView(ctx: Context) : View(ctx) {
         text.isFakeBoldText = true
         val tw = text.measureText(s)
         paint.style = Paint.Style.FILL
-        paint.color = alpha(Color.WHITE, 225)
+        paint.color = alpha(pal.card, 225)
         rect.set(x - tw / 2 - dp(6f), y - dp(10f), x + tw / 2 + dp(6f), y + dp(8f))
         c.drawRoundRect(rect, dp(9f), dp(9f), paint)
-        text.color = Color.parseColor("#263238")
+        text.color = pal.text
         c.drawText(s, x, y + dp(4f), text)
         text.isFakeBoldText = false
     }
@@ -229,7 +235,8 @@ class LevelBarView(ctx: Context) : View(ctx) {
         set(v) { field = v; invalidate() }
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; color = Color.parseColor("#455A64") }
+    private val pal = Ui.palette(ctx)
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; color = pal.sub }
     private val arrow = Path()
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -259,7 +266,7 @@ class LevelBarView(ctx: Context) : View(ctx) {
                 arrow.lineTo(x + w / 2 + dp(6f), 0f)
                 arrow.lineTo(x + w / 2, top - dp(1f))
                 arrow.close()
-                paint.color = Color.parseColor("#263238")
+                paint.color = pal.text
                 c.drawPath(arrow, paint)
             }
         }
@@ -282,7 +289,8 @@ class RainChartView(ctx: Context) : View(ctx) {
     }
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; color = Color.parseColor("#455A64") }
+    private val pal = Ui.palette(ctx)
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; color = pal.sub }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // Tiada hujan langsung: carta rendah supaya tak banyak ruang kosong
@@ -309,10 +317,33 @@ class RainChartView(ctx: Context) : View(ctx) {
             // punca kuasa dua supaya hujan renyai pun nampak; 30 mm/j = penuh
             val h = if (v < 0.1) dp(3f) else maxOf(dp(6f), sqrt(min(v, 30.0) / 30.0).toFloat() * maxH)
             val bottom = iconH + valueH + maxH
-            paint.color = if (v < 0.1) Color.parseColor("#CFD8DC") else Weather.Level.of(v).color
+            paint.color = if (v < 0.1) pal.border else Weather.Level.of(v).color
             c.drawRoundRect(x, bottom - h, x + w, bottom, dp(3f), dp(3f), paint)
             if (v >= 0.1) c.drawText(String.format(Locale.US, "%.1f", v), x + w / 2, bottom - h - dp(4f), text)
             if (i % 2 == 1 || n <= 4) c.drawText(times.getOrElse(i) { "" }, x + w / 2, height - dp(4f), text)
         }
     }
+}
+
+/** Penapis peta mod gelap: songsang warna + putar hue 180° (jalan kekal berwarna), sedikit malap. */
+private fun darkMap(): ColorMatrix {
+    val invert = ColorMatrix(
+        floatArrayOf(
+            -1f, 0f, 0f, 0f, 255f,
+            0f, -1f, 0f, 0f, 255f,
+            0f, 0f, -1f, 0f, 255f,
+            0f, 0f, 0f, 1f, 0f,
+        )
+    )
+    val hue180 = ColorMatrix(
+        floatArrayOf(
+            -0.574f, 1.43f, 0.144f, 0f, 0f,
+            0.426f, 0.43f, 0.144f, 0f, 0f,
+            0.426f, 1.43f, -0.856f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f,
+        )
+    )
+    hue180.preConcat(invert)
+    hue180.postConcat(ColorMatrix().apply { setScale(0.85f, 0.85f, 0.85f, 1f) })
+    return hue180
 }

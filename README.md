@@ -8,6 +8,7 @@ Semak hujan sebelum ride (Android 8.0+).
 - **Ramalan 6 jam**: ikon, suhu & peluang hujan (%) setiap jam — jam berpeluang hujan tinggi diserlahkan
 - Keputusan ringkas: 🟢 Cuaca baik untuk ride / 🟡 / 🟠 / 🔴 Tangguh dulu
 - Dikemas kini automatik setiap 5 minit semasa app dibuka
+- **Tetapan ⚙️**: bahasa (Melayu / English / 中文 / தமிழ்) dan mod paparan (ikut sistem / cerah / gelap)
 - **Kemas kini sendiri** dari GitHub Releases (semak setiap hari, boleh dimatikan)
 
 ## Cara pasang
@@ -22,3 +23,5 @@ meminta maklumat release dari `api.github.com`. Tiada data lain dihantar.
 
 Data cuaca: [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0).
 Peta: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors. Ramalan model — bukan jaminan.
+
+Dibangunkan oleh **Mohd Muzamil**.

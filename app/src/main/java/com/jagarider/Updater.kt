@@ -193,10 +193,11 @@ object Updater {
 
     @SuppressLint("MissingPermission")
     fun notifyNew(ctx: Context, rel: Release) {
+        I18n.lang = Prefs.lang(ctx) // boleh dipanggil dari latar (UpdateJob)
         if (Prefs.notifiedVersion(ctx) == rel.version) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CH, "Kemas kini JagaRider", NotificationManager.IMPORTANCE_DEFAULT)
+            NotificationChannel(CH, t("Kemas kini JagaRider", "JagaRider updates", "JagaRider 更新", "JagaRider புதுப்பிப்புகள்"), NotificationManager.IMPORTANCE_DEFAULT)
         )
         val pi = PendingIntent.getActivity(
             ctx, 1,
@@ -207,8 +208,8 @@ object Updater {
         )
         val n = Notification.Builder(ctx, CH)
             .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle("Versi baru JagaRider ${rel.version}")
-            .setContentText("Tekan untuk kemas kini")
+            .setContentTitle(t("Versi baru JagaRider ${rel.version}", "New JagaRider version ${rel.version}", "JagaRider 新版本 ${rel.version}", "JagaRider புதிய பதிப்பு ${rel.version}"))
+            .setContentText(t("Tekan untuk kemas kini", "Tap to update", "点击更新", "புதுப்பிக்கத் தட்டவும்"))
             .setContentIntent(pi)
             .setAutoCancel(true)
             .build()
@@ -236,6 +237,7 @@ class UpdateJob : JobService() {
 /** Terima status daripada PackageInstaller — buka skrin pengesahan Android bila perlu. */
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
+        I18n.lang = Prefs.lang(ctx)
         when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 @Suppress("DEPRECATION")
@@ -249,7 +251,7 @@ class InstallResultReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_SUCCESS -> Unit // app akan dimulakan semula oleh sistem
             else -> {
                 val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty()
-                val text = "Kemas kini gagal" + " ($status) $msg"
+                val text = t("Kemas kini gagal", "Update failed", "更新失败", "புதுப்பிப்பு தோல்வி") + " ($status) $msg"
                 Toast.makeText(ctx, text, Toast.LENGTH_LONG).show()
             }
         }

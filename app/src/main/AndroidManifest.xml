@@ -28,6 +28,10 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
+
         <!-- Kemas kini: semakan harian + status pemasangan -->
         <service
             android:name=".UpdateJob"

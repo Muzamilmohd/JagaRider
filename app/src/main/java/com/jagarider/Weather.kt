@@ -17,13 +17,23 @@ import kotlin.math.hypot
 object Weather {
 
     /** Tahap kelebatan hujan (mm/jam). */
-    enum class Level(val label: String, val color: Int, val min: Double) {
-        NONE("Tiada hujan", Color.parseColor("#43A047"), 0.0),
-        DRIZZLE("Renyai", Color.parseColor("#4FC3F7"), 0.1),
-        LIGHT("Ringan", Color.parseColor("#039BE5"), 1.0),
-        MODERATE("Sederhana", Color.parseColor("#3949AB"), 4.0),
-        HEAVY("Lebat", Color.parseColor("#FB8C00"), 10.0),
-        VERY_HEAVY("Sangat lebat", Color.parseColor("#E53935"), 30.0);
+    enum class Level(val color: Int, val min: Double) {
+        NONE(Color.parseColor("#43A047"), 0.0),
+        DRIZZLE(Color.parseColor("#4FC3F7"), 0.1),
+        LIGHT(Color.parseColor("#039BE5"), 1.0),
+        MODERATE(Color.parseColor("#3949AB"), 4.0),
+        HEAVY(Color.parseColor("#FB8C00"), 10.0),
+        VERY_HEAVY(Color.parseColor("#E53935"), 30.0);
+
+        val label: String
+            get() = when (this) {
+                NONE -> t("Tiada hujan", "No rain", "无雨", "மழை இல்லை")
+                DRIZZLE -> t("Renyai", "Drizzle", "毛毛雨", "தூறல்")
+                LIGHT -> t("Ringan", "Light", "小雨", "லேசான")
+                MODERATE -> t("Sederhana", "Moderate", "中雨", "மிதமான")
+                HEAVY -> t("Lebat", "Heavy", "大雨", "கனமழை")
+                VERY_HEAVY -> t("Sangat lebat", "Very heavy", "暴雨", "மிகக் கனமழை")
+            }
 
         companion object {
             fun of(mmh: Double): Level = entries.last { mmh >= it.min }
@@ -174,19 +184,29 @@ object Weather {
     }
 
     fun describe(code: Int): String = when (code) {
-        0 -> "Cerah"
-        1, 2 -> "Sedikit berawan"
-        3 -> "Mendung"
-        45, 48 -> "Berkabus"
-        in 51..57 -> "Gerimis"
-        in 61..67 -> "Hujan"
-        in 80..82 -> "Hujan sekejap-sekejap"
-        in 95..99 -> "Ribut petir"
+        0 -> t("Cerah", "Clear", "晴", "தெளிவு")
+        1, 2 -> t("Sedikit berawan", "Partly cloudy", "少云", "ஓரளவு மேகமூட்டம்")
+        3 -> t("Mendung", "Overcast", "阴", "மேகமூட்டம்")
+        45, 48 -> t("Berkabus", "Fog", "雾", "மூடுபனி")
+        in 51..57 -> t("Gerimis", "Drizzle", "毛毛雨", "தூறல்")
+        in 61..67 -> t("Hujan", "Rain", "雨", "மழை")
+        in 80..82 -> t("Hujan sekejap-sekejap", "Rain showers", "阵雨", "விட்டு விட்டு மழை")
+        in 95..99 -> t("Ribut petir", "Thunderstorm", "雷暴", "இடியுடன் மழை")
         else -> "—"
     }
 
-    private val DIRS = listOf("Utara", "Timur Laut", "Timur", "Tenggara", "Selatan", "Barat Daya", "Barat", "Barat Laut")
-    fun direction(bearing: Double): String = DIRS[(((bearing + 22.5) % 360) / 45).toInt()]
+    /** Arah dalam ayat, cth. "arah Timur Laut" / "to the north-east". */
+    fun toward(bearing: Double): String {
+        val i = (((bearing + 22.5) % 360) / 45).toInt()
+        return when (I18n.lang) {
+            Lang.MS -> "arah " + listOf("Utara", "Timur Laut", "Timur", "Tenggara", "Selatan", "Barat Daya", "Barat", "Barat Laut")[i]
+            Lang.EN -> "to the " + listOf("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")[i]
+            Lang.ZH -> listOf("北", "东北", "东", "东南", "南", "西南", "西", "西北")[i] + "方向"
+            Lang.TA -> listOf("வடக்கு", "வடகிழக்கு", "கிழக்கு", "தென்கிழக்கு", "தெற்கு", "தென்மேற்கு", "மேற்கு", "வடமேற்கு")[i] + " திசையில்"
+        }
+    }
+
+    val unit: String get() = t("mm/jam", "mm/h", "毫米/小时", "மிமீ/மணி")
 
     fun formatKm(km: Double): String = if (km % 1.0 == 0.0) "${km.toInt()} km" else String.format(Locale.US, "%.1f km", km)
 }

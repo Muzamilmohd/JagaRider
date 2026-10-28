@@ -1,0 +1,134 @@
+package com.jagarider
+
+import android.os.Bundle
+import android.view.Gravity
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
+import android.widget.Switch
+import android.widget.TextView
+
+/** Tetapan: bahasa, mod paparan, kemas kini app, dan tentang / kredit pembangun. */
+class SettingsActivity : BaseActivity() {
+
+    private var updateText: TextView? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(24))
+        }
+        val scroll = ScrollView(this).apply { addView(col) }
+        setContentView(scroll)
+        setupWindow(scroll)
+
+        // Tajuk + kembali
+        col.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label("←", 26f, bold = true).apply {
+                setPadding(dp(4), dp(4), dp(16), dp(4))
+                setOnClickListener { finish() }
+            })
+            addView(label(t("Tetapan", "Settings", "设置", "அமைப்புகள்"), 24f, bold = true))
+        })
+
+        // Bahasa
+        col.addView(header(t("Bahasa", "Language", "语言", "மொழி")))
+        val langCard = card()
+        col.addView(langCard, lp(top = 8))
+        langCard.addView(radios(Lang.entries.map { it.nativeName }, Lang.entries.indexOf(I18n.lang)) { i ->
+            Prefs.setLang(this, Lang.entries[i])
+            recreate()
+        })
+
+        // Paparan
+        col.addView(header(t("Paparan", "Display", "显示", "காட்சி")))
+        val themeCard = card()
+        col.addView(themeCard, lp(top = 8))
+        val themes = listOf(Prefs.THEME_SYSTEM, Prefs.THEME_LIGHT, Prefs.THEME_DARK)
+        themeCard.addView(
+            radios(
+                listOf(
+                    "📱  " + t("Ikut sistem", "Follow system", "跟随系统", "கணினி அமைப்பு"),
+                    "☀️  " + t("Cerah", "Light", "浅色", "வெளிர்"),
+                    "🌙  " + t("Gelap", "Dark", "深色", "இருண்ட"),
+                ),
+                themes.indexOf(Prefs.theme(this)).coerceAtLeast(0),
+            ) { i ->
+                Prefs.setTheme(this, themes[i])
+                recreate()
+            }
+        )
+
+        // Kemas kini app
+        col.addView(header(t("Kemas kini app", "App updates", "应用更新", "ஆப் புதுப்பிப்புகள்")))
+        val upCard = card()
+        col.addView(upCard, lp(top = 8))
+        upCard.addView(label(t("Versi sekarang: ", "Current version: ", "当前版本：", "தற்போதைய பதிப்பு: ") + Updater.currentVersion, 15f, color = pal.sub))
+        updateText = label("", 15f).also { upCard.addView(it) }
+        if (Updater.enabled) {
+            upCard.addView(pill(t("Semak kemas kini", "Check for updates", "检查更新", "புதுப்பிப்பைச் சரிபார்க்கவும்"), primary = true) {
+                UpdateUi.check(this, quiet = false) { updateText?.text = it }
+            }, lp(top = 6))
+            upCard.addView(Switch(this).apply {
+                text = t("Semak kemas kini automatik setiap hari", "Check for updates automatically every day", "每天自动检查更新", "தினமும் தானாகப் புதுப்பிப்பைச் சரிபார்க்கவும்")
+                textSize = 15f
+                setTextColor(pal.text)
+                isChecked = Prefs.autoUpdate(this@SettingsActivity)
+                setPadding(0, dp(12), 0, dp(4))
+                setOnCheckedChangeListener { _, on ->
+                    Prefs.setAutoUpdate(this@SettingsActivity, on)
+                    Updater.schedule(this@SettingsActivity)
+                }
+            })
+        } else {
+            updateText?.text = t("Kemas kini dimatikan (tiada repo).", "Updates disabled (no repo).", "更新已关闭（无仓库）。", "புதுப்பிப்பு முடக்கப்பட்டது.")
+        }
+
+        // Tentang
+        col.addView(header(t("Tentang", "About", "关于", "பற்றி")))
+        val about = card().apply { gravity = Gravity.CENTER_HORIZONTAL }
+        col.addView(about, lp(top = 8))
+        about.addView(ImageView(this).apply { setImageResource(R.drawable.ic_launcher) }, LinearLayout.LayoutParams(dp(72), dp(72)))
+        about.addView(label("JagaRider v${BuildConfig.VERSION_NAME}", 20f, bold = true, color = pal.orange).apply { gravity = Gravity.CENTER })
+        about.addView(label(t("Semak hujan sebelum ride", "Check the rain before you ride", "出发前查看降雨", "பயணத்திற்கு முன் மழையைச் சரிபார்க்கவும்"), 14f, color = pal.sub).apply { gravity = Gravity.CENTER })
+        about.addView(label(t("Dibangunkan oleh", "Developed by", "开发者", "உருவாக்கியவர்"), 13f, color = pal.sub).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(16), 0, 0)
+        })
+        about.addView(label("👨‍💻 Mohd Muzamil", 18f, bold = true).apply { gravity = Gravity.CENTER })
+        about.addView(
+            label(
+                t(
+                    "Data cuaca: Open-Meteo.com (CC BY 4.0)\nPeta: © OpenStreetMap contributors\nRamalan model — bukan jaminan.",
+                    "Weather data: Open-Meteo.com (CC BY 4.0)\nMap: © OpenStreetMap contributors\nModel forecast — not a guarantee.",
+                    "天气数据：Open-Meteo.com（CC BY 4.0）\n地图：© OpenStreetMap contributors\n模型预报，仅供参考。",
+                    "வானிலை தரவு: Open-Meteo.com (CC BY 4.0)\nவரைபடம்: © OpenStreetMap contributors\nமாதிரி முன்னறிவிப்பு — உத்தரவாதம் அல்ல.",
+                ),
+                12f, color = pal.sub,
+            ).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(16), 0, 0)
+            }
+        )
+    }
+
+    /** Senarai pilihan radio; onPick dipanggil bila pilihan ditukar. */
+    private fun radios(options: List<String>, selected: Int, onPick: (Int) -> Unit) = RadioGroup(this).apply {
+        options.forEachIndexed { i, s ->
+            addView(RadioButton(this@SettingsActivity).apply {
+                id = i + 1
+                text = s
+                textSize = 16f
+                setTextColor(pal.text)
+                setPadding(dp(8), dp(10), 0, dp(10))
+            })
+        }
+        check(selected + 1)
+        setOnCheckedChangeListener { _, id -> if (id - 1 != selected) onPick(id - 1) }
+    }
+}

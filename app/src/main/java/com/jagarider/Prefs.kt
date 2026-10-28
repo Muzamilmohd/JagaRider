@@ -6,6 +6,22 @@ import android.content.Context
 object Prefs {
     private fun sp(c: Context) = c.getSharedPreferences("jagarider", Context.MODE_PRIVATE)
 
+    const val THEME_SYSTEM = "system"
+    const val THEME_LIGHT = "light"
+    const val THEME_DARK = "dark"
+
+    /** Lalai Bahasa Melayu (bukan bahasa telefon) — pengguna tukar di Tetapan. */
+    fun lang(c: Context): Lang = Lang.of(sp(c).getString("lang", null))
+    fun setLang(c: Context, lang: Lang) {
+        sp(c).edit().putString("lang", lang.code).apply()
+    }
+
+    /** Mod paparan: ikut sistem / cerah / gelap. */
+    fun theme(c: Context): String = sp(c).getString("theme", THEME_SYSTEM) ?: THEME_SYSTEM
+    fun setTheme(c: Context, theme: String) {
+        sp(c).edit().putString("theme", theme).apply()
+    }
+
     /** Jarak semakan hujan sekeliling rider (km). */
     fun rangeKm(c: Context): Int = sp(c).getInt("range_km", 10)
     fun setRangeKm(c: Context, km: Int) {

@@ -2,7 +2,14 @@
 
 Android app (Kotlin, no external libraries) for motorcycle riders to check rain before a ride: live rain
 intensity at their location, a map of rain distribution within a chosen range (5/10/25/50 km), a 2-hour forecast, and
-OTA self-update from GitHub Releases. UI text in Bahasa Melayu.
+OTA self-update from GitHub Releases. Developer credit: Mohd Muzamil (Settings → About + main screen footer).
+
+UI text in 4 languages, default **Bahasa Melayu**, selectable in Settings: Melayu / English / 中文 / தமிழ்
+(`Lang`, `I18n.lang`, `Prefs.lang`). Every user-facing string goes through `t(ms, en, zh, ta)` (I18n.kt) —
+always fill all four. In Kotlin templates next to Chinese/Tamil text use `${name}`, not `$name`.
+Light/dark/follow-system theme (`Prefs.theme`): colours come from `Palette` (Ui.kt); views read
+`Ui.palette(ctx)`; the map gets an invert + hue-rotate ColorMatrix in dark mode. Activities extend
+`BaseActivity` (Ui.kt), which applies language + theme before `onCreate` and `recreate()`s on change.
 Package/applicationId `com.jagarider` — never change it (breaks OTA updates).
 
 ## Files
@@ -16,7 +23,9 @@ Package/applicationId `com.jagarider` — never change it (breaks OTA updates).
   `RainChartView` (15-min bars with weather icons; shrinks when dry). Hourly strip (6 h: icon, temp,
   precipitation_probability) is built in `MainActivity.renderHours`. `Weather.icon(code, "HH:mm")` = emoji, day 7–18.
 - `MainActivity.kt` – main screen (code-built UI): location (LocationManager, no Play services), verdict
-  (🟢/🟡/🟠/🔴), auto-refresh every 5 min while resumed, "Kemas kini app" section.
+  (🟢/🟡/🟠/🔴), auto-refresh every 5 min while resumed, ⚙️ button → `SettingsActivity`.
+- `SettingsActivity.kt` – language, display mode, app updates (check button + daily switch), About/credit.
+- `UpdateUi.kt` – shared check → dialog → install flow (main screen auto-check + Settings button).
 - `Updater.kt` – checks `https://api.github.com/repos/<jagarider.updateRepo>/releases/latest` (repo in
   `gradle.properties`, `Muzamilmohd/JagaRider`), daily via `UpdateJob` + on app open, installs the release's
   `.apk` asset through `PackageInstaller`. Copied from JagaPMA (`com.jagalink`).
