@@ -1,5 +1,6 @@
 package com.jagarider
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
@@ -12,12 +13,18 @@ import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.media.AudioAttributes
 import android.net.Uri
+import android.os.Build
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
- * Amaran hujan di latar: kira-kira setiap 15 minit semak hujan di sekitar lokasi terakhir rider
- * (disimpan semasa app dibuka) dan keluarkan notifikasi berbunyi:
+ * Amaran hujan di latar: kira-kira setiap 15 minit semak hujan di sekitar lokasi rider — lokasi live kalau
+ * dibenarkan "sepanjang masa", kalau tak lokasi terakhir semasa app dibuka — dan keluarkan notifikasi berbunyi:
  * hujan biasa = bunyi hujan, hujan lebat / ribut petir = bunyi hujan + guruh.
  */
 object RainAlert {
@@ -57,6 +64,8 @@ object RainAlert {
     /** Di thread latar. Pulangkan true kalau semakan berjaya (ada lokasi + data). */
     fun check(ctx: Context): Boolean {
         I18n.lang = Prefs.lang(ctx)
+        // Lokasi live kalau dibenarkan "sepanjang masa", kalau tak lokasi terakhir semasa app dibuka
+        liveLocation(ctx)?.let { Prefs.setLastLocation(ctx, it.first, it.second) }
         val (lat, lon) = Prefs.lastLocation(ctx) ?: return false
         val km = Prefs.alertKm(ctx)
         // Grid kecil 5×5 — jimat had Open-Meteo kerana berjalan setiap 15 minit
@@ -90,6 +99,38 @@ object RainAlert {
             Prefs.setAlertState(ctx, level, Prefs.alertTime(ctx))
         }
         return true
+    }
+
+    /** Boleh dapat lokasi di latar? Android 10+ perlu "Benarkan sepanjang masa"; sebelum tu cukup kebenaran biasa. */
+    fun hasBackgroundLocation(ctx: Context): Boolean {
+        fun granted(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
+        val foreground = granted(Manifest.permission.ACCESS_FINE_LOCATION) || granted(Manifest.permission.ACCESS_COARSE_LOCATION)
+        return foreground && (Build.VERSION.SDK_INT < 29 || granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+    }
+
+    /** Lokasi semasa di thread latar (tunggu maks 20 s). Null kalau tiada kebenaran / tiada lokasi. */
+    @SuppressLint("MissingPermission")
+    private fun liveLocation(ctx: Context): Pair<Double, Double>? {
+        if (!hasBackgroundLocation(ctx)) return null
+        return try {
+            val lm = ctx.getSystemService(LocationManager::class.java)
+            val providers = lm.getProviders(true)
+            val last = providers.mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }.maxByOrNull { it.time }
+            var loc: Location? = last?.takeIf { System.currentTimeMillis() - it.time < 10 * 60_000L }
+            val provider = when {
+                LocationManager.NETWORK_PROVIDER in providers -> LocationManager.NETWORK_PROVIDER
+                LocationManager.GPS_PROVIDER in providers -> LocationManager.GPS_PROVIDER
+                else -> null
+            }
+            if (loc == null && provider != null && Build.VERSION.SDK_INT >= 30) {
+                val latch = CountDownLatch(1)
+                lm.getCurrentLocation(provider, null, ctx.mainExecutor) { loc = it; latch.countDown() }
+                latch.await(20, TimeUnit.SECONDS)
+            }
+            (loc ?: last)?.let { it.latitude to it.longitude }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun message(me: Weather.Sample, nowRain: List<Weather.Sample>, soonMmh: Double, thunder: Boolean, km: Int): String {
@@ -195,4 +236,15 @@ class RainAlertJob : JobService() {
     }
 
     override fun onStopJob(params: JobParameters): Boolean = true
+}
+
+/**
+ * Android buang job yang dijadualkan bila app dikemas kini (OTA) — jadualkan semula amaran hujan
+ * dan semakan kemas kini terus selepas update / restart, tanpa tunggu app dibuka.
+ */
+class RescheduleReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        RainAlert.schedule(ctx)
+        Updater.schedule(ctx)
+    }
 }

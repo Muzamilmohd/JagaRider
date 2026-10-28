@@ -19,8 +19,8 @@ android {
         applicationId = "com.jagarider"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
 
         // Repo GitHub (owner/nama) tempat semak update — tetapkan dalam gradle.properties
         val repo = (project.findProperty("jagarider.updateRepo") as String?).orEmpty()

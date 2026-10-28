@@ -8,7 +8,7 @@ Semak hujan sebelum ride (Android 8.0+).
 - **Ramalan 6 jam**: ikon, suhu & peluang hujan (%) setiap jam — jam berpeluang hujan tinggi diserlahkan
 - Keputusan ringkas: 🟢 Cuaca baik untuk ride / 🟡 / 🟠 / 🔴 Tangguh dulu
 - Dikemas kini automatik setiap 5 minit semasa app dibuka
-- **Amaran hujan 🔔**: notifikasi berbunyi bila hujan dalam 5 / 10 / 25 km — bunyi hujan untuk hujan biasa, hujan + guruh untuk hujan lebat / ribut petir
+- **Amaran hujan 🔔**: notifikasi berbunyi bila hujan dalam 5 / 10 / 25 km (ikut lokasi live jika lokasi dibenarkan sepanjang masa) — bunyi hujan untuk hujan biasa, hujan + guruh untuk hujan lebat / ribut petir
 - **Tetapan ⚙️**: bahasa (Melayu / English / 中文 / தமிழ்) dan mod paparan (ikut sistem / cerah / gelap)
 - **Kemas kini sendiri** dari GitHub Releases (semak setiap hari, boleh dimatikan)
 
@@ -18,7 +18,7 @@ Semak hujan sebelum ride (Android 8.0+).
 3. Benarkan akses lokasi supaya JagaRide boleh semak hujan di sekeliling anda.
 
 ## Privasi
-Lokasi hanya digunakan semasa app dibuka. Koordinat titik semakan dihantar ke `api.open-meteo.com`
+Lokasi digunakan semasa app dibuka, dan di latar untuk amaran hujan hanya jika anda pilih "Benarkan sepanjang masa". Koordinat titik semakan dihantar ke `api.open-meteo.com`
 untuk data cuaca, dan jubin peta kawasan sekitar dimuat turun dari `tile.openstreetmap.org`; app juga
 meminta maklumat release dari `api.github.com`. Tiada data lain dihantar.
 

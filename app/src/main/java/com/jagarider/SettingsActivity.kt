@@ -1,8 +1,17 @@
 package com.jagarider
 
+import android.Manifest
+import android.app.AlertDialog
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -15,6 +24,79 @@ import android.widget.TextView
 class SettingsActivity : BaseActivity() {
 
     private var updateText: TextView? = null
+    private lateinit var locStatus: TextView
+    private lateinit var locBtn: Button
+
+    override fun onResume() {
+        super.onResume()
+        // Pulang dari skrin kebenaran Android — kemas kini status
+        if (::locStatus.isInitialized) refreshLocStatus()
+    }
+
+    private fun refreshLocStatus() {
+        val live = RainAlert.hasBackgroundLocation(this)
+        locStatus.text = if (live) {
+            "📍 " + t("Amaran ikut lokasi live anda.", "Alerts follow your live location.", "提醒跟随您的实时位置。", "எச்சரிக்கை உங்கள் நேரடி இருப்பிடத்தைப் பின்தொடரும்.")
+        } else {
+            "📍 " + t(
+                "Amaran guna lokasi terakhir semasa app dibuka. Benarkan lokasi \"sepanjang masa\" supaya amaran ikut anda semasa ride.",
+                "Alerts use your last location when the app was open. Allow location \"all the time\" so alerts follow you while riding.",
+                "提醒使用上次打开应用时的位置。请“始终允许”定位，骑行时提醒会跟随您。",
+                "எச்சரிக்கை ஆப் கடைசியாகத் திறந்த இடத்தைப் பயன்படுத்துகிறது. பயணத்தின்போது உங்களைப் பின்தொடர இருப்பிடத்தை \"எப்போதும்\" அனுமதிக்கவும்.",
+            )
+        }
+        locStatus.setTextColor(if (live) Color.parseColor("#43A047") else pal.sub)
+        locBtn.visibility = if (live) View.GONE else View.VISIBLE
+    }
+
+    /**
+     * Android 10+: kebenaran latar mesti diminta selepas kebenaran biasa; Android 11+ terus buka skrin
+     * kebenaran app (pengguna pilih "Benarkan sepanjang masa"). Terangkan dulu kenapa perlu.
+     */
+    private fun askBackgroundLocation() {
+        val fg = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (fg.none { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
+            requestPermissions(fg, REQ_FG)
+            return
+        }
+        if (Build.VERSION.SDK_INT < 29) {
+            refreshLocStatus()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("📍 " + t("Lokasi sepanjang masa", "Location all the time", "始终允许定位", "எப்போதும் இருப்பிடம்"))
+            .setMessage(
+                t(
+                    "Supaya amaran hujan ikut lokasi anda semasa ride walaupun app ditutup, pilih \"Benarkan sepanjang masa\" di skrin seterusnya.\n\nLokasi hanya digunakan untuk semak cuaca dan tidak disimpan di mana-mana pelayan.",
+                    "So rain alerts follow you while riding even when the app is closed, choose \"Allow all the time\" on the next screen.\n\nLocation is only used to check the weather and is not stored on any server.",
+                    "为了在应用关闭时骑行提醒也能跟随您的位置，请在下一个页面选择“始终允许”。\n\n位置仅用于查询天气，不会存储在任何服务器上。",
+                    "ஆப் மூடப்பட்டிருந்தாலும் பயணத்தின்போது மழை எச்சரிக்கை உங்களைப் பின்தொடர, அடுத்த திரையில் \"எப்போதும் அனுமதி\" என்பதைத் தேர்ந்தெடுக்கவும்.\n\nஇருப்பிடம் வானிலையைச் சரிபார்க்க மட்டுமே பயன்படும், எந்தச் சேவையகத்திலும் சேமிக்கப்படாது.",
+                )
+            )
+            .setPositiveButton(t("Teruskan", "Continue", "继续", "தொடரவும்")) { _, _ ->
+                requestPermissions(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), REQ_BG)
+            }
+            .setNegativeButton(t("Nanti", "Later", "稍后", "பின்னர்"), null)
+            .show()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        when (requestCode) {
+            REQ_FG -> if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) askBackgroundLocation()
+            REQ_BG -> {
+                refreshLocStatus()
+                // "Jangan tanya lagi" — buka tetapan app terus
+                if (!RainAlert.hasBackgroundLocation(this) && !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                }
+            }
+        }
+    }
+
+    companion object {
+        private const val REQ_FG = 11
+        private const val REQ_BG = 12
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,15 +175,24 @@ class SettingsActivity : BaseActivity() {
         alertCard.addView(
             label(
                 t(
-                    "🌧️ Hujan biasa = bunyi hujan\n⛈️ Hujan lebat / ribut petir = bunyi hujan + guruh\nDisemak ~setiap 15 minit di sekitar lokasi terakhir semasa app dibuka.",
-                    "🌧️ Normal rain = rain sound\n⛈️ Heavy rain / thunderstorm = rain + thunder sound\nChecked about every 15 minutes around your last location when the app was open.",
-                    "🌧️ 普通降雨 = 雨声\n⛈️ 大雨/雷暴 = 雨声 + 雷声\n约每15分钟检查一次（以上次打开应用时的位置为准）。",
-                    "🌧️ சாதாரண மழை = மழை ஒலி\n⛈️ கனமழை / இடிமழை = மழை + இடி ஒலி\nஆப் கடைசியாகத் திறந்த இடத்தைச் சுற்றி ~15 நிமிடத்திற்கு ஒருமுறை சரிபார்க்கப்படும்.",
+                    "🌧️ Hujan biasa = bunyi hujan\n⛈️ Hujan lebat / ribut petir = bunyi hujan + guruh\nDisemak ~setiap 15 minit.",
+                    "🌧️ Normal rain = rain sound\n⛈️ Heavy rain / thunderstorm = rain + thunder sound\nChecked about every 15 minutes.",
+                    "🌧️ 普通降雨 = 雨声\n⛈️ 大雨/雷暴 = 雨声 + 雷声\n约每15分钟检查一次。",
+                    "🌧️ சாதாரண மழை = மழை ஒலி\n⛈️ கனமழை / இடிமழை = மழை + இடி ஒலி\n~15 நிமிடத்திற்கு ஒருமுறை சரிபார்க்கப்படும்.",
                 ),
                 13f, color = pal.sub,
             ),
             lp(top = 6),
         )
+
+        // Lokasi untuk amaran: live (sepanjang masa) atau lokasi terakhir semasa app dibuka
+        locStatus = label("", 14f, bold = true)
+        alertCard.addView(locStatus, lp(top = 8))
+        locBtn = pill("📍 " + t("Benarkan lokasi sepanjang masa", "Allow location all the time", "始终允许定位", "எப்போதும் இருப்பிடத்தை அனுமதிக்கவும்"), primary = true) {
+            askBackgroundLocation()
+        }
+        alertCard.addView(locBtn, lp(top = 4))
+        refreshLocStatus()
         alertCard.addView(LinearLayout(this).apply {
             addView(pill("🌧️ " + t("Cuba bunyi hujan", "Test rain", "试听雨声", "மழை ஒலி")) { RainAlert.test(this@SettingsActivity, RainAlert.RAIN) },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, 0, dp(4), 0) })

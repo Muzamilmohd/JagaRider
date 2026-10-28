@@ -204,6 +204,7 @@ class MainActivity : BaseActivity() {
         val missing = perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), REQ_PERMS)
 
+        RainAlert.schedule(this)
         if (Updater.enabled) {
             Updater.schedule(this)
             val fromNotification = intent.getBooleanExtra(EXTRA_CHECK_UPDATE, false)
