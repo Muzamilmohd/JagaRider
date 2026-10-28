@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- perisai -->
+    <path
+        android:fillColor="#F57C00"
+        android:pathData="M24,2 L42,9 L42,22 C42,34 34,42 24,46 C14,42 6,34 6,22 L6,9 Z" />
+    <!-- tayar motor -->
+    <path
+        android:fillColor="#263238"
+        android:pathData="M15,24 a5,5 0 1,1 0,10 a5,5 0 1,1 0,-10 z M33,24 a5,5 0 1,1 0,10 a5,5 0 1,1 0,-10 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15,27 a2,2 0 1,1 0,4 a2,2 0 1,1 0,-4 z M33,27 a2,2 0 1,1 0,4 a2,2 0 1,1 0,-4 z" />
+    <!-- badan motor -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15,28 L22,20 L30,20 L33,28 L31,29 L28,23 L23,23 L17,29 Z M27,16 h5 v3 h-5 z" />
+</vector>
