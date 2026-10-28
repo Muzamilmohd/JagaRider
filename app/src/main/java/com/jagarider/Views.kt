@@ -401,7 +401,12 @@ class RainChartView(ctx: Context) : View(ctx) {
             paint.color = if (v < 0.1) pal.border else Weather.Level.of(v).color
             c.drawRoundRect(x, bottom - h, x + w, bottom, dp(3f), dp(3f), paint)
             if (v >= 0.1) c.drawText(String.format(Locale.US, "%.1f", v), x + w / 2, bottom - h - dp(4f), text)
-            if (i % 2 == 1 || n <= 4) c.drawText(Clock.hm(times.getOrElse(i) { "" }), x + w / 2, height - dp(4f), text)
+            if (i % 2 == 1 || n <= 4) {
+                // label 12 jam ("5:00 PM") lebih lebar — jangan terkeluar tepi kanan
+                val s = Clock.hm(times.getOrElse(i) { "" })
+                val half = text.measureText(s) / 2
+                c.drawText(s, (x + w / 2).coerceAtMost(width - half), height - dp(4f), text)
+            }
         }
     }
 }
