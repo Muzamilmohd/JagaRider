@@ -1,4 +1,4 @@
-import java.util.Properties
+﻿import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -19,10 +19,10 @@ android {
         applicationId = "com.jagarider"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
-        // Repo GitHub (owner/nama) tempat semak update — tetapkan dalam gradle.properties
+        // Repo GitHub (owner/nama) tempat semak update â€” tetapkan dalam gradle.properties
         val repo = (project.findProperty("jagarider.updateRepo") as String?).orEmpty()
         buildConfigField("String", "UPDATE_REPO", "\"$repo\"")
     }
@@ -61,5 +61,5 @@ kotlin {
 }
 
 dependencies {
-    // Tiada library luar — semua guna Android standard supaya ringan.
+    // Tiada library luar â€” semua guna Android standard supaya ringan.
 }

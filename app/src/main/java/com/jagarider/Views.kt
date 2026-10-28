@@ -1,133 +1,224 @@
 package com.jagarider
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Matrix
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RadialGradient
-import android.graphics.Shader
-import android.graphics.SweepGradient
+import android.graphics.RectF
 import android.os.SystemClock
 import android.view.View
 import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.min
-import kotlin.math.sin
+import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 private fun View.dp(v: Float) = v * resources.displayMetrics.density
 private fun alpha(color: Int, a: Int) = Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
 
-/** Radar hujan: rider di tengah, kawasan hujan sekeliling dalam jarak dipilih, garisan sapuan "live". */
-class RadarView(ctx: Context) : View(ctx) {
+/**
+ * Peta OpenStreetMap berpusat pada rider, dengan taburan hujan (grid Open-Meteo, diinterpolasi)
+ * dilukis di atasnya. Bulatan = jarak semakan.
+ */
+class RainMapView(ctx: Context) : View(ctx) {
 
     var rangeKm = 10.0
         set(v) { field = v; invalidate() }
-    var samples: List<Weather.Sample> = emptyList()
-        set(v) { field = v; invalidate() }
+
+    private var centerLat = Double.NaN
+    private var centerLon = Double.NaN
+    private var samples: List<Weather.Sample> = emptyList()
+    private var overlay: Bitmap? = null
+    private var overlayNW = 0.0 to 0.0 // lat, lon
+    private var overlaySE = 0.0 to 0.0
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG)
     private val clip = Path()
-    private val sweepMatrix = Matrix()
-    private val start = SystemClock.uptimeMillis()
+    private val ring = Path()
+    private val rect = RectF()
+
+    // keadaan unjuran untuk lukisan semasa
+    private var world = 0.0
+    private var scale = 1f
+    private var cx = 0.0
+    private var cy = 0.0
+
+    fun set(samples: List<Weather.Sample>, rangeKm: Double) {
+        val c = samples.firstOrNull() ?: return
+        centerLat = c.point.lat
+        centerLon = c.point.lon
+        this.samples = samples
+        this.rangeKm = rangeKm
+        buildOverlay()
+        invalidate()
+    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val s = MeasureSpec.getSize(widthMeasureSpec)
         setMeasuredDimension(s, s)
     }
 
+    /** Interpolasi grid mm/jam → bitmap kecil berwarna ikut tahap (lutsinar bila tiada hujan). */
+    private fun buildOverlay() {
+        val n = Weather.GRID
+        val grid = Array(n) { DoubleArray(n) }
+        var nw: Weather.Point? = null
+        var se: Weather.Point? = null
+        for (s in samples) {
+            grid[s.point.row][s.point.col] = s.mmh
+            if (s.point.row == 0 && s.point.col == 0) nw = s.point
+            if (s.point.row == n - 1 && s.point.col == n - 1) se = s.point
+        }
+        if (nw == null || se == null) {
+            overlay = null
+            return
+        }
+        val m = 120
+        val px = IntArray(m * m)
+        for (y in 0 until m) for (x in 0 until m) {
+            val gx = x.toDouble() / (m - 1) * (n - 1)
+            val gy = y.toDouble() / (m - 1) * (n - 1)
+            val x0 = floor(gx).toInt().coerceAtMost(n - 2)
+            val y0 = floor(gy).toInt().coerceAtMost(n - 2)
+            val fx = gx - x0
+            val fy = gy - y0
+            val v = grid[y0][x0] * (1 - fx) * (1 - fy) + grid[y0][x0 + 1] * fx * (1 - fy) +
+                grid[y0 + 1][x0] * (1 - fx) * fy + grid[y0 + 1][x0 + 1] * fx * fy
+            px[y * m + x] = if (v < 0.1) Color.TRANSPARENT else alpha(Weather.Level.of(v).color, 165)
+        }
+        overlay = Bitmap.createBitmap(px, m, m, Bitmap.Config.ARGB_8888)
+        overlayNW = nw.lat to nw.lon
+        overlaySE = se.lat to se.lon
+    }
+
+    private fun mercX(lon: Double) = (lon + 180.0) / 360.0
+    private fun mercY(lat: Double): Double {
+        val r = Math.toRadians(lat)
+        return (1 - ln(tan(r) + 1 / cos(r)) / PI) / 2
+    }
+
+    private fun sx(lon: Double) = ((mercX(lon) * world - cx) * scale + width / 2.0).toFloat()
+    private fun sy(lat: Double) = ((mercY(lat) * world - cy) * scale + height / 2.0).toFloat()
+
     override fun onDraw(c: Canvas) {
-        val cx = width / 2f
-        val cy = height / 2f
-        val r = min(cx, cy) - dp(22f)
-        if (r <= 0) return
-
-        paint.style = Paint.Style.FILL
-        paint.color = Color.parseColor("#0D1B2A")
-        c.drawCircle(cx, cy, r, paint)
-
-        // Kawasan hujan (gumpalan lembut) — dipotong ikut bulatan radar
+        val w = width.toFloat()
+        val h = height.toFloat()
         c.save()
         clip.reset()
-        clip.addCircle(cx, cy, r, Path.Direction.CW)
+        clip.addRoundRect(0f, 0f, w, h, dp(12f), dp(12f), Path.Direction.CW)
         c.clipPath(clip)
-        for (s in samples) {
-            if (s.mmh < 0.1) continue
-            val (x, y) = pos(s.point, cx, cy, r)
-            val br = r * 0.45f
-            val col = s.level.color
-            paint.shader = RadialGradient(x, y, br, alpha(col, 210), alpha(col, 0), Shader.TileMode.CLAMP)
-            c.drawCircle(x, y, br, paint)
+        c.drawColor(Color.parseColor("#E5E3DF"))
+
+        if (centerLat.isNaN()) {
+            text.color = Color.parseColor("#607D8B")
+            text.textSize = dp(15f)
+            text.textAlign = Paint.Align.CENTER
+            c.drawText("Menunggu lokasi…", w / 2, h / 2, text)
+            c.restore()
+            return
         }
-        paint.shader = null
 
-        // Sapuan radar (berpusing setiap 4 saat)
-        val angle = ((SystemClock.uptimeMillis() - start) % 4000L) / 4000f * 360f
-        val green = Color.parseColor("#00E676")
-        val sweep = SweepGradient(cx, cy, intArrayOf(alpha(green, 0), alpha(green, 0), alpha(green, 90)), floatArrayOf(0f, 0.75f, 1f))
-        sweepMatrix.setRotate(angle - 90f, cx, cy)
-        sweep.setLocalMatrix(sweepMatrix)
-        paint.shader = sweep
-        c.drawCircle(cx, cy, r, paint)
-        paint.shader = null
-        c.restore()
+        // Zum: jarak semakan ≈ 87% separuh lebar peta
+        val radiusPx = w / 2 / 1.15f
+        val kmPerPx = rangeKm / radiusPx
+        val kmPerWorldPxZ0 = 40075.016 * cos(Math.toRadians(centerLat)) / 256.0
+        val zf = ln(kmPerWorldPxZ0 / kmPerPx) / ln(2.0)
+        val z = floor(zf).toInt().coerceIn(2, 18)
+        world = 256.0 * 2.0.pow(z)
+        scale = (kmPerWorldPxZ0 / 2.0.pow(z) / kmPerPx).toFloat()
+        cx = mercX(centerLon) * world
+        cy = mercY(centerLat) * world
 
-        // Gelang jarak + garis arah
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = dp(1f)
-        paint.color = alpha(Color.WHITE, 70)
-        c.drawCircle(cx, cy, r / 2, paint)
-        c.drawCircle(cx, cy, r, paint)
-        c.drawLine(cx - r, cy, cx + r, cy, paint)
-        c.drawLine(cx, cy - r, cx, cy + r, paint)
-        val a = Math.toRadians(angle.toDouble())
-        paint.color = alpha(green, 200)
-        paint.strokeWidth = dp(2f)
-        c.drawLine(cx, cy, cx + r * sin(a).toFloat(), cy - r * cos(a).toFloat(), paint)
-
-        // Titik semakan
-        paint.style = Paint.Style.FILL
-        for (s in samples.drop(1)) {
-            val (x, y) = pos(s.point, cx, cy, r)
-            paint.color = if (s.mmh < 0.1) alpha(Color.WHITE, 90) else s.level.color
-            c.drawCircle(x, y, dp(if (s.mmh < 0.1) 2.5f else 5f), paint)
-            if (s.thunder) {
-                text.textSize = dp(14f)
-                c.drawText("⚡", x, y - dp(6f), text)
+        // Jubin peta
+        val tiles = 1 shl z
+        val tileSize = 256f * scale
+        val left = cx - w / 2 / scale
+        val top = cy - h / 2 / scale
+        val tx0 = floor(left / 256).toInt()
+        val ty0 = floor(top / 256).toInt()
+        val tx1 = floor((left + w / scale) / 256).toInt()
+        val ty1 = floor((top + h / scale) / 256).toInt()
+        for (ty in ty0..ty1) {
+            if (ty < 0 || ty >= tiles) continue
+            for (tx in tx0..tx1) {
+                val x = ((tx * 256 - cx) * scale + w / 2).toFloat()
+                val y = ((ty * 256 - cy) * scale + h / 2).toFloat()
+                rect.set(x, y, x + tileSize, y + tileSize)
+                val bmp = MapTiles.get(context, z, Math.floorMod(tx, tiles), ty) { invalidate() }
+                if (bmp != null) c.drawBitmap(bmp, null, rect, bmpPaint)
             }
         }
 
-        // Rider di tengah
-        paint.color = Color.parseColor("#FF6F00")
-        c.drawCircle(cx, cy, dp(9f), paint)
+        // Taburan hujan — dipotong ikut bulatan jarak (grid segi empat, tepinya tak cantik)
+        overlay?.let {
+            c.save()
+            ring.reset()
+            ring.addCircle(w / 2, h / 2, radiusPx, Path.Direction.CW)
+            c.clipPath(ring)
+            rect.set(sx(overlayNW.second), sy(overlayNW.first), sx(overlaySE.second), sy(overlaySE.first))
+            c.drawBitmap(it, null, rect, bmpPaint)
+            c.restore()
+        }
+        text.textAlign = Paint.Align.CENTER
+        text.textSize = dp(16f)
+        for (s in samples) if (s.thunder) c.drawText("⚡", sx(s.point.lon), sy(s.point.lat) + dp(6f), text)
+
+        // Bulatan jarak
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = dp(2f)
+        paint.color = alpha(Color.parseColor("#263238"), 170)
+        paint.pathEffect = DashPathEffect(floatArrayOf(dp(8f), dp(6f)), 0f)
+        c.drawCircle(w / 2, h / 2, radiusPx, paint)
+        paint.pathEffect = null
+        label(c, Weather.formatKm(rangeKm), w / 2, h / 2 - radiusPx + dp(4f))
+
+        // Rider (berdenyut = live)
+        val t = (SystemClock.uptimeMillis() % 1600L) / 1600f
+        paint.style = Paint.Style.FILL
+        paint.color = alpha(Color.parseColor("#FF6F00"), ((1 - t) * 140).toInt())
+        c.drawCircle(w / 2, h / 2, dp(9f + 20f * t), paint)
         paint.color = Color.WHITE
-        c.drawCircle(cx, cy, dp(4f), paint)
+        c.drawCircle(w / 2, h / 2, dp(10f), paint)
+        paint.color = Color.parseColor("#FF6F00")
+        c.drawCircle(w / 2, h / 2, dp(7.5f), paint)
 
-        // Label arah & jarak
-        text.color = Color.parseColor("#455A64")
-        text.textSize = dp(13f)
-        text.isFakeBoldText = true
-        val off = dp(12f)
-        c.drawText("U", cx, cy - r - off + dp(5f), text)
-        c.drawText("S", cx, cy + r + off + dp(5f), text)
-        c.drawText("T", cx + r + off, cy + dp(5f), text)
-        c.drawText("B", cx - r - off, cy + dp(5f), text)
-        text.isFakeBoldText = false
-        text.textSize = dp(11f)
-        text.color = alpha(Color.WHITE, 170)
-        c.drawText(Weather.formatKm(rangeKm / 2), cx + dp(22f), cy - r / 2 - dp(4f), text)
-        c.drawText(Weather.formatKm(rangeKm), cx + dp(22f), cy - r + dp(14f), text)
+        // Utara + atribusi (wajib untuk OSM)
+        label(c, "▲ U", dp(26f), dp(22f))
+        text.textSize = dp(10f)
+        text.textAlign = Paint.Align.RIGHT
+        val attr = "© OpenStreetMap · Open-Meteo"
+        val aw = text.measureText(attr)
+        paint.color = alpha(Color.WHITE, 200)
+        c.drawRect(w - aw - dp(8f), h - dp(16f), w, h, paint)
+        text.color = Color.parseColor("#37474F")
+        c.drawText(attr, w - dp(4f), h - dp(4.5f), text)
 
-        postInvalidateDelayed(40)
+        c.restore()
+        postInvalidateDelayed(50)
     }
 
-    private fun pos(p: Weather.Point, cx: Float, cy: Float, r: Float): Pair<Float, Float> {
-        val f = (p.distKm / rangeKm).toFloat() * r
-        val b = Math.toRadians(p.bearing)
-        return (cx + f * sin(b).toFloat()) to (cy - f * cos(b).toFloat())
+    /** Teks kecil berlatar putih, berpusat pada (x, y). */
+    private fun label(c: Canvas, s: String, x: Float, y: Float) {
+        text.textSize = dp(12f)
+        text.textAlign = Paint.Align.CENTER
+        text.isFakeBoldText = true
+        val tw = text.measureText(s)
+        paint.style = Paint.Style.FILL
+        paint.color = alpha(Color.WHITE, 225)
+        rect.set(x - tw / 2 - dp(6f), y - dp(10f), x + tw / 2 + dp(6f), y + dp(8f))
+        c.drawRoundRect(rect, dp(9f), dp(9f), paint)
+        text.color = Color.parseColor("#263238")
+        c.drawText(s, x, y + dp(4f), text)
+        text.isFakeBoldText = false
     }
 }
 
@@ -151,7 +242,6 @@ class LevelBarView(ctx: Context) : View(ctx) {
         val w = (width - gap * (levels.size - 1)) / levels.size
         val top = dp(10f)
         val h = dp(16f)
-        text.textSize = dp(10.5f)
         for ((i, l) in levels.withIndex()) {
             val x = i * (w + gap)
             val on = l == level

@@ -34,7 +34,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Skrin utama: status hujan live di lokasi rider + radar dalam jarak dipilih + ramalan 2 jam. */
+/** Skrin utama: status hujan live di lokasi rider + peta taburan hujan dalam jarak dipilih + ramalan 2 jam. */
 class MainActivity : Activity() {
 
     private val grey = Color.parseColor("#607D8B")
@@ -47,7 +47,7 @@ class MainActivity : Activity() {
     private lateinit var detailText: TextView
     private lateinit var levelBar: LevelBarView
     private lateinit var verdictText: TextView
-    private lateinit var radar: RadarView
+    private lateinit var map: RainMapView
     private lateinit var nearestText: TextView
     private lateinit var chart: RainChartView
     private lateinit var forecastText: TextView
@@ -142,7 +142,7 @@ class MainActivity : Activity() {
         }
         card.addView(locationBtn)
 
-        // Jarak + radar
+        // Jarak + peta hujan
         col.addView(header("Jarak semakan"))
         col.addView(LinearLayout(this).apply {
             for (km in RANGES) {
@@ -155,12 +155,12 @@ class MainActivity : Activity() {
                 addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(2), 0, dp(2), 0) })
             }
         })
-        val radarCard = card()
-        col.addView(radarCard, lp(top = 8))
-        radar = RadarView(this).apply { rangeKm = Prefs.rangeKm(this@MainActivity).toDouble() }
-        radarCard.addView(radar)
+        val mapCard = card()
+        col.addView(mapCard, lp(top = 8))
+        map = RainMapView(this).apply { rangeKm = Prefs.rangeKm(this@MainActivity).toDouble() }
+        mapCard.addView(map)
         nearestText = label("", 15f, color = dark)
-        radarCard.addView(nearestText, lp(top = 6))
+        mapCard.addView(nearestText, lp(top = 6))
         styleRangeButtons()
 
         // Ramalan
@@ -357,9 +357,8 @@ class MainActivity : Activity() {
         levelBar.level = level
 
         // Kawasan sekeliling
-        radar.rangeKm = range
-        radar.samples = samples
-        val rainy = around.filter { it.mmh >= 0.1 }
+        map.set(samples, range)
+        val rainy = around.filter { it.mmh >= 0.1 && it.point.distKm <= range * 1.01 }
         val nearest = rainy.minWithOrNull(compareBy<Weather.Sample> { it.point.distKm }.thenByDescending { it.mmh })
         val heaviest = rainy.maxByOrNull { it.mmh }
         nearestText.text = buildString {
@@ -420,7 +419,7 @@ class MainActivity : Activity() {
 
     private fun selectRange(km: Int) {
         Prefs.setRangeKm(this, km)
-        radar.rangeKm = km.toDouble()
+        map.rangeKm = km.toDouble()
         styleRangeButtons()
         val loc = lastLocation
         if (loc != null && !loading) fetchWeather(loc) else refresh(force = true)

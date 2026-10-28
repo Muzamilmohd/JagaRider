@@ -6,10 +6,9 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
-import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.sin
+import kotlin.math.hypot
 
 /**
  * Data hujan dari Open-Meteo (percuma, tiada API key). Hanya koordinat titik semakan dihantar —
@@ -31,8 +30,18 @@ object Weather {
         }
     }
 
-    /** Titik semakan: arah (darjah dari utara) dan jarak dari rider. */
-    data class Point(val lat: Double, val lon: Double, val bearing: Double, val distKm: Double)
+    /** Saiz grid titik semakan (GRID × GRID) untuk peta taburan hujan. */
+    const val GRID = 7
+
+    /** Titik semakan: arah (darjah dari utara), jarak dari rider, dan kedudukan dalam grid (baris 0 = utara). */
+    data class Point(
+        val lat: Double,
+        val lon: Double,
+        val bearing: Double,
+        val distKm: Double,
+        val row: Int = GRID / 2,
+        val col: Int = GRID / 2,
+    )
 
     data class Sample(
         val point: Point,
@@ -46,25 +55,30 @@ object Weather {
         val thunder get() = code >= 95
     }
 
-    /** Tengah (lokasi rider) + 8 arah pada separuh jarak dan jarak penuh = 17 titik. */
+    /**
+     * Grid GRID × GRID meliputi segi empat ±jarak dari rider (49 titik).
+     * Titik tengah (lokasi rider) diletak pertama dalam senarai.
+     */
     fun points(lat: Double, lon: Double, rangeKm: Double): List<Point> {
-        val list = mutableListOf(Point(lat, lon, 0.0, 0.0))
-        for (d in listOf(rangeKm / 2, rangeKm)) for (i in 0 until 8) {
-            val b = i * 45.0
-            val (la, lo) = destination(lat, lon, b, d)
-            list += Point(la, lo, b, d)
+        val half = GRID / 2
+        val step = rangeKm / half
+        val kmPerDegLat = 111.32
+        val kmPerDegLon = 111.32 * cos(Math.toRadians(lat))
+        val list = mutableListOf(Point(lat, lon, 0.0, 0.0, half, half))
+        for (r in 0 until GRID) for (c in 0 until GRID) {
+            if (r == half && c == half) continue
+            val east = (c - half) * step
+            val north = (half - r) * step
+            list += Point(
+                lat = lat + north / kmPerDegLat,
+                lon = lon + east / kmPerDegLon,
+                bearing = (Math.toDegrees(atan2(east, north)) + 360) % 360,
+                distKm = hypot(east, north),
+                row = r,
+                col = c,
+            )
         }
         return list
-    }
-
-    private fun destination(lat: Double, lon: Double, bearingDeg: Double, distKm: Double): Pair<Double, Double> {
-        val d = distKm / 6371.0
-        val b = Math.toRadians(bearingDeg)
-        val p1 = Math.toRadians(lat)
-        val l1 = Math.toRadians(lon)
-        val p2 = asin(sin(p1) * cos(d) + cos(p1) * sin(d) * cos(b))
-        val l2 = l1 + atan2(sin(b) * sin(d) * cos(p1), cos(d) - sin(p1) * sin(p2))
-        return Math.toDegrees(p2) to Math.toDegrees(l2)
     }
 
     /** Panggil di thread latar. Satu permintaan untuk semua titik. */
