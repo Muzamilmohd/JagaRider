@@ -84,3 +84,18 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   Attribution: RainViewer on map + About.
 - Clock: `Clock` (I18n.kt) formats every displayed time 12h/24h (`Prefs.clock24`, default = phone setting);
   API times stay "HH:mm" internally — format only at display (`Clock.hm`, `Clock.hour`, `Clock.time`).
+
+## Riders tab (v2.2)
+- Bottom tab bar (MainActivity): 🌧️ Weather | 🏍️ Riders (`RiderPage.kt`). Notification/`EXTRA_RIDER_TAB` opens Riders.
+- Backend: Firebase project `jagaride-427d6` (owner: the user's Google account), via REST only (`Firebase.kt`):
+  Anonymous Auth (identitytoolkit signUp / securetoken refresh) + Realtime Database (Singapore). Config lives in
+  **`firebase.properties`** (gitignored, keep a backup: `dbUrl=…`, `apiKey=…`) → `BuildConfig.FIREBASE_DB/KEY`.
+  Without it the Riders tab shows "not set up".
+- Groups (`RiderGroup.kt`): invite code `JR-XXXX-XXXX-XXXX-XXXX-XXXX` (100-bit secret). gid = SHA-256("gid:"+code)[:32],
+  AES-GCM key = SHA-256("key:"+code)[:16]. Paths: `groups/{gid}/meta` {n: enc(name), t}, `groups/{gid}/m/{uid}`
+  {d: enc({n,a,o,s}), t: server timestamp}. Server never sees names/locations in clear. One active group per phone.
+- Rules: `firebase/database.rules.json` (paste into console → Realtime Database → Rules → Publish).
+- `LocationShareService`: foreground service (type location) started only by the user's "Start sharing" button;
+  GPS/network updates every 5 s, uploads every ≥10 s; Stop in app or notification removes my entry.
+- RiderPage polls `groups/{gid}/m` every 8 s while visible; map = `RainMapView.setCenter` + `riders` markers,
+  auto-zoom to fit; hides riders idle > 2 h, greys > 5 min.

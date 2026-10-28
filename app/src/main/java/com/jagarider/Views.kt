@@ -68,6 +68,17 @@ class RainMapView(ctx: Context) : View(ctx) {
     private val radarPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply { alpha = 215 }
     private val chipRect = RectF()
 
+    /** Rider lain dalam kumpulan (tab Rider) — dilukis sebagai titik bernama. */
+    var riders: List<RiderGroup.Rider> = emptyList()
+        set(v) { field = v; invalidate() }
+
+    /** Tab Rider: pusatkan pada saya tanpa data cuaca (hanya radar + rider). */
+    fun setCenter(lat: Double, lon: Double, rangeSetting: Int) {
+        riderLat = lat
+        riderLon = lon
+        preview(rangeSetting)
+    }
+
     /** Data baru: sampel pertama = lokasi rider. */
     fun set(samples: List<Weather.Sample>, rangeSetting: Int) {
         val r = samples.firstOrNull() ?: return
@@ -251,6 +262,19 @@ class RainMapView(ctx: Context) : View(ctx) {
             label(c, "🇲🇾 " + t("Semenanjung Malaysia", "Peninsular Malaysia", "马来西亚半岛", "தீபகற்ப மலேசியா"), w / 2, dp(22f))
         }
 
+        // Rider lain dalam kumpulan
+        for ((i, r) in riders.withIndex()) {
+            val x = sx(r.lon)
+            val y = sy(r.lat)
+            val stale = System.currentTimeMillis() - r.time > 5 * 60_000L
+            paint.style = Paint.Style.FILL
+            paint.color = Color.WHITE
+            c.drawCircle(x, y, dp(9f), paint)
+            paint.color = if (stale) Color.GRAY else RIDER_COLORS[i % RIDER_COLORS.size]
+            c.drawCircle(x, y, dp(6.5f), paint)
+            label(c, r.name, x, y - dp(20f))
+        }
+
         // Rider (berdenyut = live)
         val t = (SystemClock.uptimeMillis() % 1600L) / 1600f
         paint.style = Paint.Style.FILL
@@ -308,6 +332,11 @@ class RainMapView(ctx: Context) : View(ctx) {
         text.isFakeBoldText = false
     }
 }
+
+private val RIDER_COLORS = intArrayOf(
+    Color.parseColor("#1E88E5"), Color.parseColor("#8E24AA"), Color.parseColor("#43A047"),
+    Color.parseColor("#D81B60"), Color.parseColor("#00897B"), Color.parseColor("#5E35B1"),
+)
 
 /** Bar 6 tahap kelebatan; tahap sekarang terang + anak panah, lain pudar. */
 class LevelBarView(ctx: Context) : View(ctx) {

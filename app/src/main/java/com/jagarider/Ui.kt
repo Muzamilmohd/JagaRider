@@ -49,7 +49,7 @@ object Ui {
  */
 abstract class BaseActivity : Activity() {
 
-    protected lateinit var pal: Palette
+    lateinit var pal: Palette
     private var appliedLang: Lang? = null
     private var appliedDark: Boolean? = null
     private var appliedClock: Boolean? = null
@@ -92,13 +92,13 @@ abstract class BaseActivity : Activity() {
 
     // ------------------------------------------------------------ UI kecil
 
-    protected fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    protected fun lp(top: Int = 0) = LinearLayout.LayoutParams(
+    fun lp(top: Int = 0) = LinearLayout.LayoutParams(
         LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
     ).apply { topMargin = dp(top) }
 
-    protected fun card() = LinearLayout(this).apply {
+    fun card() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(16), dp(14), dp(16), dp(14))
         background = GradientDrawable().apply {
@@ -108,7 +108,7 @@ abstract class BaseActivity : Activity() {
         elevation = dp(2).toFloat()
     }
 
-    protected fun label(text: String, size: Float, bold: Boolean = false, color: Int = pal.text) =
+    fun label(text: String, size: Float, bold: Boolean = false, color: Int = pal.text) =
         TextView(this).apply {
             this.text = text
             textSize = size
@@ -117,10 +117,10 @@ abstract class BaseActivity : Activity() {
             setPadding(0, dp(4), 0, dp(4))
         }
 
-    protected fun header(text: String) = label(text, 18f, bold = true).apply { setPadding(0, dp(20), 0, dp(2)) }
+    fun header(text: String) = label(text, 18f, bold = true).apply { setPadding(0, dp(20), 0, dp(2)) }
 
     /** Butang bulat: utama (oren) atau biasa (warna kad + garis tepi). */
-    protected fun pill(text: String, primary: Boolean = false, onClick: () -> Unit) = Button(this).apply {
+    fun pill(text: String, primary: Boolean = false, onClick: () -> Unit) = Button(this).apply {
         this.text = text
         isAllCaps = false
         textSize = 15f
@@ -130,7 +130,7 @@ abstract class BaseActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    protected fun stylePill(b: Button, primary: Boolean) {
+    fun stylePill(b: Button, primary: Boolean) {
         b.background = GradientDrawable().apply {
             setColor(if (primary) pal.orange else pal.card)
             setStroke(dp(1), if (primary) pal.orange else pal.border)

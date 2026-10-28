@@ -5,6 +5,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Projek Firebase untuk kongsi lokasi rider (tidak masuk git): dbUrl=..., apiKey=...
+val firebaseProps = Properties().apply {
+    val f = rootProject.file("firebase.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 // Kunci tandatangan release (tidak masuk git). Semua APK update mesti guna kunci yang sama.
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
@@ -19,12 +25,14 @@ android {
         applicationId = "com.jagarider"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "2.1"
+        versionCode = 13
+        versionName = "2.2"
 
         // Repo GitHub (owner/nama) tempat semak update — tetapkan dalam gradle.properties
         val repo = (project.findProperty("jagarider.updateRepo") as String?).orEmpty()
         buildConfigField("String", "UPDATE_REPO", "\"$repo\"")
+        buildConfigField("String", "FIREBASE_DB", "\"${firebaseProps.getProperty("dbUrl", "").trimEnd('/')}\"")
+        buildConfigField("String", "FIREBASE_KEY", "\"${firebaseProps.getProperty("apiKey", "")}\"")
     }
 
     buildFeatures {

@@ -8,3 +8,4 @@ keystore.properties
 *.jks
 dist/
 *.log
+firebase.properties

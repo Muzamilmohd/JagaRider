@@ -1,0 +1,19 @@
+{
+  "rules": {
+    "groups": {
+      "$gid": {
+        ".read": "auth != null && $gid.length === 32",
+        "meta": {
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.hasChildren(['n', 't']) && newData.child('n').isString() && newData.child('n').val().length < 400 && newData.child('t').isNumber()"
+        },
+        "m": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['d', 't']) && newData.child('d').isString() && newData.child('d').val().length < 1000 && newData.child('t').isNumber()"
+          }
+        }
+      }
+    }
+  }
+}

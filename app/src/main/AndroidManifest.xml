@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Pilihan: amaran hujan ikut lokasi live di latar ("Benarkan sepanjang masa") -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Kongsi lokasi live dengan kumpulan rider (servis latar depan, hanya bila rider tekan Mula) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <application
         android:allowBackup="false"
@@ -35,6 +38,12 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="false" />
+
+        <!-- Kongsi lokasi live dengan kumpulan rider -->
+        <service
+            android:name=".LocationShareService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <!-- Amaran hujan di latar (~15 minit) -->
         <service

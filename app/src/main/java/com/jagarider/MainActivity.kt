@@ -21,6 +21,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -66,9 +67,19 @@ class MainActivity : BaseActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(24))
         }
-        val scroll = ScrollView(this).apply { addView(col) }
-        setContentView(scroll)
-        setupWindow(scroll)
+        weatherPage = ScrollView(this).apply { addView(col) }
+        riderPage = RiderPage(this)
+        // Dua halaman (Cuaca / Rider) + bar tab di bawah
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(FrameLayout(this@MainActivity).apply {
+                addView(weatherPage)
+                addView(riderPage.root)
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(tabBar())
+        }
+        setContentView(root)
+        setupWindow(root)
 
         // Tajuk + butang Tetapan
         col.addView(LinearLayout(this).apply {
@@ -209,22 +220,76 @@ class MainActivity : BaseActivity() {
             val stale = System.currentTimeMillis() - Prefs.lastUpdateCheck(this) > 12 * 60 * 60_000L
             if (fromNotification || (Prefs.autoUpdate(this) && stale)) UpdateUi.check(this, quiet = !fromNotification) {}
         }
+        showTab(if (intent.getBooleanExtra(EXTRA_RIDER_TAB, false)) 1 else (savedInstanceState?.getInt("tab") ?: 0))
+    }
+
+    override fun onSaveInstanceState(out: Bundle) {
+        super.onSaveInstanceState(out)
+        out.putInt("tab", tab)
     }
 
     override fun onResume() {
         super.onResume()
         val wait = (refreshMs() - (System.currentTimeMillis() - lastRefresh)).coerceAtLeast(0)
         main.postDelayed(autoRefresh, if (lastRefresh == 0L) 0 else wait)
+        if (tab == 1) riderPage.onShow()
     }
 
     override fun onPause() {
         super.onPause()
         main.removeCallbacks(autoRefresh)
+        riderPage.onHide()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra(EXTRA_CHECK_UPDATE, false)) UpdateUi.check(this, quiet = false) {}
+        if (intent.getBooleanExtra(EXTRA_RIDER_TAB, false)) showTab(1)
+    }
+
+    // ------------------------------------------------------------ tab bawah
+
+    private lateinit var weatherPage: ScrollView
+    private lateinit var riderPage: RiderPage
+    private var tab = 0
+    private val tabViews = mutableListOf<LinearLayout>()
+
+    private fun tabBar() = LinearLayout(this).apply {
+        setBackgroundColor(pal.card)
+        elevation = dp(8).toFloat()
+        setPadding(0, dp(4), 0, dp(4))
+        val tabs = listOf(
+            "🌧️" to t("Cuaca", "Weather", "天气", "வானிலை"),
+            "🏍️" to t("Rider", "Riders", "骑手", "ரைடர்கள்"),
+        )
+        for ((i, pair) in tabs.withIndex()) {
+            val v = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4), 0, dp(4))
+                addView(label(pair.first, 22f).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, 0) })
+                addView(label(pair.second, 12f, bold = true).apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, 0) })
+                setOnClickListener { showTab(i) }
+            }
+            tabViews += v
+            addView(v, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+    }
+
+    private fun showTab(i: Int) {
+        tab = i
+        weatherPage.visibility = if (i == 0) View.VISIBLE else View.GONE
+        riderPage.root.visibility = if (i == 1) View.VISIBLE else View.GONE
+        if (i == 1) riderPage.onShow() else riderPage.onHide()
+        for ((k, v) in tabViews.withIndex()) {
+            val on = k == i
+            v.alpha = if (on) 1f else 0.5f
+            (v.getChildAt(1) as TextView).setTextColor(if (on) pal.orange else pal.sub)
+            v.background = if (on) GradientDrawable().apply {
+                setColor(Color.argb(30, 230, 81, 0))
+                cornerRadius = dp(14).toFloat()
+            } else null
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -633,6 +698,7 @@ class MainActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_CHECK_UPDATE = "check_update"
+        const val EXTRA_RIDER_TAB = "rider_tab"
         private const val REQ_PERMS = 1
         private val RANGES = listOf(5, 10, 25, 50, 100, 200, 300, Weather.PENINSULA)
     }
