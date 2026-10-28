@@ -51,6 +51,8 @@ class MainActivity : Activity() {
     private lateinit var nearestText: TextView
     private lateinit var chart: RainChartView
     private lateinit var forecastText: TextView
+    private lateinit var hourRow: LinearLayout
+    private lateinit var hourText: TextView
     private lateinit var locationBtn: Button
     private val rangeButtons = mutableMapOf<Int, Button>()
     private var updateText: TextView? = null
@@ -172,6 +174,14 @@ class MainActivity : Activity() {
         fcCard.addView(label("mm/jam setiap 15 minit", 12f, color = grey))
         forecastText = label("", 15f, color = dark)
         fcCard.addView(forecastText)
+
+        col.addView(header("Ramalan 6 jam"))
+        val hourCard = card()
+        col.addView(hourCard, lp(top = 8))
+        hourRow = LinearLayout(this)
+        hourCard.addView(hourRow)
+        hourText = label("", 15f, color = dark)
+        hourCard.addView(hourText, lp(top = 6))
 
         col.addView(Button(this).apply {
             text = "🔄 Muat semula"
@@ -374,11 +384,14 @@ class MainActivity : Activity() {
         }
 
         // Ramalan 2 jam
-        chart.set(center.nextMmh, center.nextTimes)
+        chart.set(center.nextMmh, center.nextTimes, center.nextCodes)
+        renderHours(center.hours)
         val firstWet = center.nextMmh.indexOfFirst { it >= 0.1 }
         val firstDry = center.nextMmh.indexOfFirst { it < 0.1 }
         forecastText.text = when {
-            center.mmh < 0.1 && firstWet < 0 -> "☀️ Tiada hujan dijangka dalam 2 jam."
+            center.mmh < 0.1 && firstWet < 0 ->
+                Weather.icon(center.nextCodes.firstOrNull() ?: center.code, center.nextTimes.firstOrNull().orEmpty()) +
+                    " Tiada hujan dijangka dalam 2 jam."
             center.mmh < 0.1 -> "🌧️ Hujan dijangka mula ~${center.nextTimes[firstWet]} (${Weather.Level.of(center.nextMmh[firstWet]).label})."
             firstDry >= 0 -> "🌤️ Hujan dijangka reda ~${center.nextTimes[firstDry]}."
             else -> "🌧️ Hujan dijangka berterusan 2 jam lagi."
@@ -404,6 +417,53 @@ class MainActivity : Activity() {
             cornerRadius = dp(10).toFloat()
         }
         verdictText.visibility = View.VISIBLE
+    }
+
+    /** Jalur ramalan setiap jam: masa, ikon, suhu, peluang hujan. Jam berpeluang hujan tinggi diserlahkan. */
+    private fun renderHours(hours: List<Weather.Hour>) {
+        hourRow.removeAllViews()
+        for (h in hours) {
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(0, dp(8), 0, dp(8))
+                val tint = when {
+                    h.code >= 95 -> "#FFE0B2"
+                    h.prob >= 50 -> "#E3F2FD"
+                    else -> null
+                }
+                if (tint != null) background = GradientDrawable().apply {
+                    setColor(Color.parseColor(tint))
+                    cornerRadius = dp(12).toFloat()
+                }
+            }
+            fun line(s: String, size: Float, color: Int, bold: Boolean = false) = label(s, size, bold, color).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(1), 0, dp(1))
+            }
+            cell.addView(line(h.time, 12f, grey))
+            cell.addView(line(Weather.icon(h.code, h.time), 26f, dark))
+            cell.addView(line(if (h.tempC.isNaN()) "—" else String.format(Locale.US, "%.0f°", h.tempC), 15f, dark, bold = true))
+            val probColor = when {
+                h.prob >= 70 -> "#1565C0"
+                h.prob >= 40 -> "#1E88E5"
+                else -> "#90A4AE"
+            }
+            cell.addView(line("💧${h.prob}%", 12f, Color.parseColor(probColor), bold = h.prob >= 50))
+            hourRow.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(dp(2), 0, dp(2), 0)
+            })
+        }
+        val storm = hours.firstOrNull { it.code >= 95 }
+        val wet = hours.firstOrNull { it.prob >= 50 }
+        val maxProb = hours.maxOfOrNull { it.prob } ?: 0
+        hourText.text = when {
+            hours.isEmpty() -> ""
+            storm != null -> "⛈️ Ribut petir dijangka ~${storm.time} — elak ride waktu tu."
+            wet != null -> "☔ Peluang hujan tinggi mulai ~${wet.time} (${wet.prob}%) — gerak awal atau bawa baju hujan."
+            maxProb >= 30 -> "🌥️ Peluang hujan sederhana (sehingga $maxProb%)."
+            else -> "👍 Peluang hujan rendah untuk 6 jam ini."
+        }
     }
 
     private fun emoji(s: Weather.Sample): String = when {

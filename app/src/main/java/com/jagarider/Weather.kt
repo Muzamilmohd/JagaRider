@@ -30,6 +30,9 @@ object Weather {
         }
     }
 
+    /** Ramalan satu jam: masa "HH:mm", kod cuaca, suhu, peluang hujan (%), hujan (mm/jam). */
+    data class Hour(val time: String, val code: Int, val tempC: Double, val prob: Int, val mmh: Double)
+
     /** Saiz grid titik semakan (GRID × GRID) untuk peta taburan hujan. */
     const val GRID = 7
 
@@ -50,6 +53,8 @@ object Weather {
         val tempC: Double,
         val nextMmh: List<Double>,    // setiap 15 minit, 2 jam akan datang
         val nextTimes: List<String>,  // "HH:mm"
+        val nextCodes: List<Int>,     // kod cuaca setiap 15 minit
+        val hours: List<Hour>,        // ramalan setiap jam, 6 jam akan datang
     ) {
         val level get() = Level.of(mmh)
         val thunder get() = code >= 95
@@ -85,8 +90,9 @@ object Weather {
     fun fetch(points: List<Point>): List<Sample> {
         fun join(f: (Point) -> Double) = points.joinToString(",") { String.format(Locale.US, "%.4f", f(it)) }
         val url = "https://api.open-meteo.com/v1/forecast?latitude=${join { it.lat }}&longitude=${join { it.lon }}" +
-            "&current=temperature_2m,precipitation,weather_code&minutely_15=precipitation" +
-            "&forecast_minutely_15=9&timezone=auto"
+            "&current=temperature_2m,precipitation,weather_code&minutely_15=precipitation,weather_code" +
+            "&forecast_minutely_15=9&hourly=weather_code,temperature_2m,precipitation_probability,precipitation" +
+            "&forecast_hours=7&timezone=auto"
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = 15_000
@@ -114,11 +120,29 @@ object Weather {
         val prec = m.getJSONArray("precipitation")
         val now = cur.optString("time")
         val start = (0 until times.length()).firstOrNull { times.getString(it) == now } ?: 0
+        val codes = m.optJSONArray("weather_code")
         val next = mutableListOf<Double>()
         val nextTimes = mutableListOf<String>()
+        val nextCodes = mutableListOf<Int>()
         for (k in start + 1 until minOf(times.length(), start + 9)) {
             next += prec.optDouble(k, 0.0).let { if (it.isNaN()) 0.0 else it * 4 }
             nextTimes += times.getString(k).substringAfter('T')
+            nextCodes += codes?.optInt(k, 0) ?: 0
+        }
+        // Jam penuh selepas sekarang (jam semasa dilangkau). Hujan setiap jam = mm/jam terus.
+        val hours = mutableListOf<Hour>()
+        o.optJSONObject("hourly")?.let { hr ->
+            val ht = hr.getJSONArray("time")
+            for (k in 0 until ht.length()) {
+                if (ht.getString(k) <= now || hours.size >= 6) continue
+                hours += Hour(
+                    time = ht.getString(k).substringAfter('T'),
+                    code = hr.getJSONArray("weather_code").optInt(k, 0),
+                    tempC = hr.getJSONArray("temperature_2m").optDouble(k, Double.NaN),
+                    prob = hr.getJSONArray("precipitation_probability").optInt(k, 0),
+                    mmh = hr.getJSONArray("precipitation").optDouble(k, 0.0).let { if (it.isNaN()) 0.0 else it },
+                )
+            }
         }
         return Sample(
             point = p,
@@ -127,7 +151,26 @@ object Weather {
             tempC = cur.optDouble("temperature_2m", Double.NaN),
             nextMmh = next,
             nextTimes = nextTimes,
+            nextCodes = nextCodes,
+            hours = hours,
         )
+    }
+
+    /** Ikon emoji untuk kod cuaca; "HH:mm" untuk bezakan siang / malam. */
+    fun icon(code: Int, time: String = ""): String {
+        val hour = time.substringBefore(':').toIntOrNull() ?: 12
+        val day = hour in 7..18
+        return when (code) {
+            0 -> if (day) "☀️" else "🌙"
+            1, 2 -> if (day) "⛅" else "☁️"
+            3 -> "☁️"
+            45, 48 -> "🌫️"
+            in 51..57 -> if (day) "🌦️" else "🌧️"
+            in 61..67, 81, 82 -> "🌧️"
+            80 -> if (day) "🌦️" else "🌧️"
+            in 95..99 -> "⛈️"
+            else -> "☁️"
+        }
     }
 
     fun describe(code: Int): String = when (code) {

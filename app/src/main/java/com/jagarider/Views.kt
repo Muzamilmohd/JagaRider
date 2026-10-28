@@ -266,15 +266,18 @@ class LevelBarView(ctx: Context) : View(ctx) {
     }
 }
 
-/** Carta hujan setiap 15 minit untuk 2 jam akan datang di lokasi rider. */
+/** Carta hujan setiap 15 minit untuk 2 jam akan datang di lokasi rider, dengan ikon cuaca di atas. */
 class RainChartView(ctx: Context) : View(ctx) {
 
     var values: List<Double> = emptyList()
     var times: List<String> = emptyList()
+    var codes: List<Int> = emptyList()
 
-    fun set(values: List<Double>, times: List<String>) {
+    fun set(values: List<Double>, times: List<String>, codes: List<Int>) {
         this.values = values
         this.times = times
+        this.codes = codes
+        requestLayout()
         invalidate()
     }
 
@@ -282,7 +285,9 @@ class RainChartView(ctx: Context) : View(ctx) {
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; color = Color.parseColor("#455A64") }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), dp(130f).toInt())
+        // Tiada hujan langsung: carta rendah supaya tak banyak ruang kosong
+        val dry = values.all { it < 0.1 }
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), dp(if (dry) 80f else 150f).toInt())
     }
 
     override fun onDraw(c: Canvas) {
@@ -290,15 +295,20 @@ class RainChartView(ctx: Context) : View(ctx) {
         val n = values.size
         val gap = dp(6f)
         val w = (width - gap * (n - 1)) / n
+        val iconH = dp(30f)
         val labelH = dp(18f)
         val valueH = dp(16f)
-        val maxH = height - labelH - valueH
+        val maxH = height - iconH - labelH - valueH
+        for ((i, code) in codes.withIndex()) {
+            text.textSize = min(dp(20f), w * 0.8f)
+            c.drawText(Weather.icon(code, times.getOrElse(i) { "" }), i * (w + gap) + w / 2, dp(22f), text)
+        }
         text.textSize = dp(10.5f)
         for ((i, v) in values.withIndex()) {
             val x = i * (w + gap)
             // punca kuasa dua supaya hujan renyai pun nampak; 30 mm/j = penuh
             val h = if (v < 0.1) dp(3f) else maxOf(dp(6f), sqrt(min(v, 30.0) / 30.0).toFloat() * maxH)
-            val bottom = valueH + maxH
+            val bottom = iconH + valueH + maxH
             paint.color = if (v < 0.1) Color.parseColor("#CFD8DC") else Weather.Level.of(v).color
             c.drawRoundRect(x, bottom - h, x + w, bottom, dp(3f), dp(3f), paint)
             if (v >= 0.1) c.drawText(String.format(Locale.US, "%.1f", v), x + w / 2, bottom - h - dp(4f), text)

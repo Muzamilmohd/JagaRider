@@ -4,7 +4,8 @@ Semak hujan sebelum ride (Android 8.0+).
 
 - **Tahap hujan live** di lokasi anda: Tiada hujan → Renyai → Ringan → Sederhana → Lebat → Sangat lebat (mm/jam)
 - **Peta hujan** 5 / 10 / 25 / 50 km: taburan hujan dilukis atas peta (OpenStreetMap), arah & jarak hujan terdekat, ribut petir ⚡
-- **Ramalan 2 jam** setiap 15 minit: bila hujan dijangka mula / reda
+- **Ramalan 2 jam** setiap 15 minit dengan ikon cuaca: bila hujan dijangka mula / reda
+- **Ramalan 6 jam**: ikon, suhu & peluang hujan (%) setiap jam — jam berpeluang hujan tinggi diserlahkan
 - Keputusan ringkas: 🟢 Cuaca baik untuk ride / 🟡 / 🟠 / 🔴 Tangguh dulu
 - Dikemas kini automatik setiap 5 minit semasa app dibuka
 - **Kemas kini sendiri** dari GitHub Releases (semak setiap hari, boleh dimatikan)

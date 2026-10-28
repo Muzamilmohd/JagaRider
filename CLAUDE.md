@@ -13,7 +13,8 @@ Package/applicationId `com.jagarider` — never change it (breaks OTA updates).
   proper User-Agent — OSM tile usage policy; never bulk-prefetch).
 - `Views.kt` – Canvas views: `RainMapView` (OSM tiles, zoom fitted to range, grid bilinearly interpolated
   into a coloured overlay clipped to the range circle, pulsing rider marker, attribution), `LevelBarView`,
-  `RainChartView`.
+  `RainChartView` (15-min bars with weather icons; shrinks when dry). Hourly strip (6 h: icon, temp,
+  precipitation_probability) is built in `MainActivity.renderHours`. `Weather.icon(code, "HH:mm")` = emoji, day 7–18.
 - `MainActivity.kt` – main screen (code-built UI): location (LocationManager, no Play services), verdict
   (🟢/🟡/🟠/🔴), auto-refresh every 5 min while resumed, "Kemas kini app" section.
 - `Updater.kt` – checks `https://api.github.com/repos/<jagarider.updateRepo>/releases/latest` (repo in
