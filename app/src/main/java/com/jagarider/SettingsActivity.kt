@@ -236,7 +236,7 @@ class SettingsActivity : BaseActivity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(16), 0, 0)
         })
-        about.addView(label("👨‍💻 Mohd Muzamil", 18f, bold = true).apply { gravity = Gravity.CENTER })
+        about.addView(label("👨‍💻 Muzamil Mohd", 18f, bold = true).apply { gravity = Gravity.CENTER })
         about.addView(
             label(
                 t(

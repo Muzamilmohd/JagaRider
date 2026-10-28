@@ -6,7 +6,7 @@ Display name **JagaRide** (renamed from JagaRider in v1.5). The package/applicat
 
 Android app (Kotlin, no external libraries) for motorcycle riders to check rain before a ride: live rain
 intensity at their location, a map of rain distribution within a slider-chosen range (5–300 km or all of Peninsular Malaysia), a 2-hour forecast, and
-OTA self-update from GitHub Releases. Developer credit: Mohd Muzamil (Settings → About + main screen footer).
+OTA self-update from GitHub Releases. Developer credit: Muzamil Mohd (Settings → About + main screen footer).
 
 UI text in 4 languages, default **Bahasa Melayu**, selectable in Settings: Melayu / English / 中文 / தமிழ்
 (`Lang`, `I18n.lang`, `Prefs.lang`). Every user-facing string goes through `t(ms, en, zh, ta)` (I18n.kt) —
@@ -36,9 +36,10 @@ Light/dark/follow-system theme (`Prefs.theme`): colours come from `Palette` (Ui.
   when ACCESS_BACKGROUND_LOCATION ("Allow all the time", optional, asked from Settings with an explanation
   dialog) is granted, otherwise around the last location
   saved while the app was open. `RescheduleReceiver` (MY_PACKAGE_REPLACED + BOOT_COMPLETED) re-schedules both
-  jobs — Android drops scheduled jobs when the app is updated. Rain → channel `rain_alert_v1` with
-  `res/raw/rain.wav`; heavy (≥10 mm/h) or thunderstorm → `storm_alert_v1` with `res/raw/storm.wav`. Channel
-  sounds are fixed once created — bump the channel ID if a sound changes. Sounds are synthesized by
+  jobs — Android drops scheduled jobs when the app is updated. Rain → channel `rain_alert_v2` with
+  `res/raw/rain.wav`; heavy (≥10 mm/h) or thunderstorm → `storm_alert_v2` with `res/raw/storm.wav`. Channel
+  sounds are fixed once created — bump the channel ID (and delete the old one) if a sound changes. Sounds (2 s, filtered
+  noise only — tonal droplets sounded like birds) are synthesized by
   `tools/GenSounds.java` (`java tools/GenSounds.java app/src/main/res/raw`). Test: `adb shell cmd jobscheduler run -f com.jagarider 4343`.
   `RECEIVE_BOOT_COMPLETED` is required for `setPersisted(true)` (without it the jobs silently never schedule).
 - `UpdateUi.kt` – shared check → dialog → install flow (main screen auto-check + Settings button).

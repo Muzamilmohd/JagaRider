@@ -32,8 +32,8 @@ object RainAlert {
     private const val JOB_ID = 4343
     private const val NOTIF_ID = 4344
     // Bunyi saluran tak boleh diubah selepas dicipta — tukar ID kalau bunyi ditukar.
-    private const val CH_RAIN = "rain_alert_v1"
-    private const val CH_STORM = "storm_alert_v1"
+    private const val CH_RAIN = "rain_alert_v2"
+    private const val CH_STORM = "storm_alert_v2"
 
     const val NONE = 0
     const val RAIN = 1
@@ -203,6 +203,9 @@ object RainAlert {
     }
 
     private fun createChannels(ctx: Context, nm: NotificationManager) {
+        // Saluran lama dengan bunyi lama (v1.6–1.7)
+        nm.deleteNotificationChannel("rain_alert_v1")
+        nm.deleteNotificationChannel("storm_alert_v1")
         val attrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -219,7 +222,7 @@ object RainAlert {
             NotificationChannel(CH_STORM, t("Amaran hujan lebat / ribut", "Heavy rain / storm alerts", "大雨/雷暴提醒", "கனமழை / புயல் எச்சரிக்கை"), NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(sound("storm"), attrs)
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 600, 200, 600, 200, 600)
+                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 400)
             }
         )
     }

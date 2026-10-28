@@ -25,4 +25,4 @@ meminta maklumat release dari `api.github.com`. Tiada data lain dihantar.
 Data cuaca: [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0).
 Peta: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors. Ramalan model — bukan jaminan.
 
-Dibangunkan oleh **Mohd Muzamil**.
+Dibangunkan oleh **Muzamil Mohd**.

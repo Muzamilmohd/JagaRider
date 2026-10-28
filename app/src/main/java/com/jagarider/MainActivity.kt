@@ -194,7 +194,7 @@ class MainActivity : BaseActivity() {
             ),
             13f, color = pal.sub,
         ).apply { gravity = Gravity.CENTER })
-        col.addView(label("JagaRide v${BuildConfig.VERSION_NAME} · " + t("Dibangunkan oleh", "Developed by", "开发者：", "உருவாக்கியவர்") + " Mohd Muzamil", 12f, color = pal.sub).apply {
+        col.addView(label("JagaRide v${BuildConfig.VERSION_NAME} · " + t("Dibangunkan oleh", "Developed by", "开发者：", "உருவாக்கியவர்") + " Muzamil Mohd", 12f, color = pal.sub).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(20), 0, 0)
         })
