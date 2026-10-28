@@ -1,15 +1,26 @@
 # JagaRider
 
-Android app (Kotlin, no external libraries) for motorcycle riders. Currently a **shell app**: main screen +
-OTA self-update from GitHub Releases. Rider features to be added later. UI text in Bahasa Melayu.
+Android app (Kotlin, no external libraries) for motorcycle riders to check rain before a ride: live rain
+intensity at their location, a radar of rain within a chosen range (5/10/25/50 km), a 2-hour forecast, and
+OTA self-update from GitHub Releases. UI text in Bahasa Melayu.
 Package/applicationId `com.jagarider` — never change it (breaks OTA updates).
 
 ## Files
-- `MainActivity.kt` – main screen (code-built UI) incl. "Kemas kini" section: check button + daily auto-check switch.
+- `Weather.kt` – Open-Meteo client (no API key). One request for 17 points: rider + 8 compass directions at
+  half and full range. `current.precipitation` / `minutely_15` are mm per 15 min → ×4 = mm/h.
+  `Level` thresholds (mm/h): 0.1 Renyai, 1 Ringan, 4 Sederhana, 10 Lebat, 30 Sangat lebat.
+- `Views.kt` – Canvas views: `RadarView` (rain blobs + animated sweep), `LevelBarView`, `RainChartView`.
+- `MainActivity.kt` – main screen (code-built UI): location (LocationManager, no Play services), verdict
+  (🟢/🟡/🟠/🔴), auto-refresh every 5 min while resumed, "Kemas kini app" section.
 - `Updater.kt` – checks `https://api.github.com/repos/<jagarider.updateRepo>/releases/latest` (repo in
   `gradle.properties`, `Muzamilmohd/JagaRider`), daily via `UpdateJob` + on app open, installs the release's
   `.apk` asset through `PackageInstaller`. Copied from JagaPMA (`com.jagalink`).
-- `Prefs.kt` – SharedPreferences (auto-update, last check, notified version).
+- `Prefs.kt` – SharedPreferences (range km, auto-update, last check, notified version).
+- Logo `res/drawable/ic_launcher.xml`: rider on motorbike with rain cloud (vector).
+
+## Testing
+Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/release/app-release.apk`,
+`adb shell pm grant com.jagarider android.permission.ACCESS_FINE_LOCATION`, screenshots via `adb exec-out screencap -p`.
 
 ## Build
 - minSdk 26, target/compileSdk 36, Gradle 9.1.0, AGP 8.13.0, Kotlin 2.2.20, bytecode 17.

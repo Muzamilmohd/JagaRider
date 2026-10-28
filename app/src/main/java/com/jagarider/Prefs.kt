@@ -6,6 +6,12 @@ import android.content.Context
 object Prefs {
     private fun sp(c: Context) = c.getSharedPreferences("jagarider", Context.MODE_PRIVATE)
 
+    /** Jarak semakan hujan sekeliling rider (km). */
+    fun rangeKm(c: Context): Int = sp(c).getInt("range_km", 10)
+    fun setRangeKm(c: Context, km: Int) {
+        sp(c).edit().putInt("range_km", km).apply()
+    }
+
     fun autoUpdate(c: Context): Boolean = sp(c).getBoolean("auto_update", true)
     fun setAutoUpdate(c: Context, on: Boolean) {
         sp(c).edit().putBoolean("auto_update", on).apply()
