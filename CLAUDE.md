@@ -66,6 +66,9 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   copy `app/build/outputs/apk/release/app-release.apk` to `dist/JagaRide-v<ver>.apk`, then
   `gh release create v<ver> dist/JagaRide-v<ver>.apk --repo Muzamilmohd/JagaRider --notes "..."`.
   Tag must be `v` + versionName. Notes above a "## Cara pasang" heading are shown in the update dialog.
+- **Before uploading, verify the APK version**: `aapt dump badging dist/JagaRide-v<ver>.apk | head -1` must show the
+  new versionCode/versionName. v1.9 and the first v2.0 upload shipped versionCode 9 ("1.8") because a failed command
+  in a `&&` chain skipped the version bump — the updater then reinstalled 1.8 forever.
 
 ## Radar (v1.9)
 - `Radar.kt` – RainViewer real radar for "now": `weather-maps.json` → latest `radar.past` frame (10-min). Free API
