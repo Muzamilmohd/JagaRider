@@ -17,6 +17,8 @@ import android.view.ScaleGestureDetector
 import android.view.View
 import java.util.Locale
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sin
 import kotlin.math.atan
 import kotlin.math.sinh
 import kotlin.math.cos
@@ -77,7 +79,29 @@ class RainMapView(ctx: Context) : View(ctx) {
 
     /** Rider lain dalam kumpulan (tab Rider) — dilukis sebagai titik bernama. */
     var riders: List<RiderGroup.Rider> = emptyList()
-        set(v) { field = v; invalidate() }
+        set(v) {
+            // Gerak lancar: mula dari kedudukan yang sedang dipapar, menuju lokasi baru dalam ANIM_MS
+            val now = SystemClock.uptimeMillis()
+            for (r in v) {
+                val cur = shownPos(r.uid, now)
+                val far = cur == null || abs(cur.first - r.lat) + abs(cur.second - r.lon) > 0.02 // > ~2 km: lompat terus
+                moveAnim[r.uid] = MoveAnim(if (far) r.lat else cur!!.first, if (far) r.lon else cur!!.second, r.lat, r.lon, now)
+            }
+            moveAnim.keys.retainAll(v.map { it.uid }.toSet())
+            field = v
+            invalidate()
+        }
+
+    private class MoveAnim(val fromLat: Double, val fromLon: Double, val toLat: Double, val toLon: Double, val start: Long)
+    private val moveAnim = HashMap<String, MoveAnim>()
+
+    /** Kedudukan rider yang sedang dipapar (antara lokasi lama & baru). */
+    private fun shownPos(uid: String, now: Long): Pair<Double, Double>? {
+        val a = moveAnim[uid] ?: return null
+        val f = ((now - a.start) / ANIM_MS).coerceIn(0f, 1f).toDouble()
+        val e = 1 - (1 - f) * (1 - f) // perlahan di hujung
+        return (a.fromLat + (a.toLat - a.fromLat) * e) to (a.fromLon + (a.toLon - a.fromLon) * e)
+    }
 
     // ------------------------------------------------------------ zum & gerak (kedua-dua tab)
 
@@ -354,16 +378,24 @@ class RainMapView(ctx: Context) : View(ctx) {
         }
 
         // Rider lain dalam kumpulan
+        val nowUp = SystemClock.uptimeMillis()
         for ((i, r) in riders.withIndex()) {
-            val x = sx(r.lon)
-            val y = sy(r.lat)
+            val (lat, lon) = shownPos(r.uid, nowUp) ?: (r.lat to r.lon)
+            val x = sx(lon)
+            val y = sy(lat)
             val stale = System.currentTimeMillis() - r.time > 5 * 60_000L
-            paint.style = Paint.Style.FILL
-            paint.color = Color.WHITE
-            c.drawCircle(x, y, dp(9f), paint)
-            paint.color = if (stale) Color.GRAY else RIDER_COLORS[i % RIDER_COLORS.size]
-            c.drawCircle(x, y, dp(6.5f), paint)
-            label(c, r.name, x, y - dp(20f))
+            val color = if (stale) Color.GRAY else RIDER_COLORS[i % RIDER_COLORS.size]
+            if (!stale && r.speedKmh >= RiderPage.MOVING_KMH) {
+                drawRiding(c, x, y, r, color, nowUp)
+                label(c, r.name + " · " + String.format(Locale.US, "%.0f km/j", r.speedKmh), x, y - dp(26f))
+            } else {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.WHITE
+                c.drawCircle(x, y, dp(9f), paint)
+                paint.color = color
+                c.drawCircle(x, y, dp(6.5f), paint)
+                label(c, r.name, x, y - dp(20f))
+            }
         }
 
         // Rider (berdenyut = live)
@@ -408,6 +440,54 @@ class RainMapView(ctx: Context) : View(ctx) {
         postInvalidateDelayed(50)
     }
 
+    /**
+     * Rider sedang ride: bulatan berwarna dengan 🏍️ yang melantun sedikit, gelang berdenyut, dan garis laju
+     * di belakang (bertentangan arah perjalanan). Lebih laju = garis lebih panjang & bergerak lebih cepat.
+     */
+    private fun drawRiding(c: Canvas, x: Float, y: Float, r: RiderGroup.Rider, color: Int, now: Long) {
+        val heading = if (r.bearing.isNaN()) 90.0 else r.bearing // tiada arah: anggap ke timur
+        val dx = sin(Math.toRadians(heading)).toFloat()
+        val dy = -cos(Math.toRadians(heading)).toFloat()
+        val speedF = (r.speedKmh / 100.0).coerceIn(0.2, 1.2).toFloat()
+        val period = (700 / speedF).toLong().coerceAtLeast(250L)
+        val ph = (now % period) / period.toFloat()
+
+        // gelang berdenyut
+        paint.style = Paint.Style.FILL
+        paint.color = alpha(color, ((1 - ph) * 110).toInt())
+        c.drawCircle(x, y, dp(14f + 10f * ph), paint)
+
+        // garis laju di belakang
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = dp(2.5f)
+        for (k in 0 until 3) {
+            val side = (k - 1) * dp(6f)
+            val back = dp(17f) + ((ph + k * 0.33f) % 1f) * dp(14f) * speedF
+            val len = dp(6f) + dp(8f) * speedF
+            val sx0 = x - dx * back + -dy * side
+            val sy0 = y - dy * back + dx * side
+            paint.color = alpha(color, (200 * (1 - ((ph + k * 0.33f) % 1f))).toInt())
+            c.drawLine(sx0, sy0, sx0 - dx * len, sy0 - dy * len, paint)
+        }
+        paint.strokeCap = Paint.Cap.BUTT
+
+        // badan penanda + motosikal melantun
+        val bob = sin(now / 90.0).toFloat() * dp(1.5f)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.WHITE
+        c.drawCircle(x, y, dp(15f), paint)
+        paint.color = color
+        c.drawCircle(x, y, dp(12.5f), paint)
+        text.textAlign = Paint.Align.CENTER
+        text.textSize = dp(15f)
+        c.save()
+        // emoji 🏍️ menghadap kanan — terbalikkan bila menuju ke barat
+        if (heading in 180.0..360.0) c.scale(-1f, 1f, x, y)
+        c.drawText("🏍️", x, y + dp(5.5f) + bob, text)
+        c.restore()
+    }
+
     /** Teks kecil berlatar putih, berpusat pada (x, y). */
     private fun label(c: Canvas, s: String, x: Float, y: Float) {
         text.textSize = dp(12f)
@@ -423,6 +503,8 @@ class RainMapView(ctx: Context) : View(ctx) {
         text.isFakeBoldText = false
     }
 }
+
+private const val ANIM_MS = 4500f
 
 private val RIDER_COLORS = intArrayOf(
     Color.parseColor("#1E88E5"), Color.parseColor("#8E24AA"), Color.parseColor("#43A047"),

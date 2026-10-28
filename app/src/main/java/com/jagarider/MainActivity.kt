@@ -21,6 +21,8 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -287,11 +289,30 @@ class MainActivity : BaseActivity() {
         }
     }
 
+    // Butang Kembali: dalam halaman kumpulan → kembali ke senarai kumpulan (bukan keluar app).
+    // targetSdk 36: Android 16 tak panggil onBackPressed lagi — guna OnBackInvokedCallback (API 33+).
+    private var backCallback: OnBackInvokedCallback? = null
+
+    fun setRiderBackHandler(on: Boolean) {
+        if (Build.VERSION.SDK_INT < 33) return
+        val cb = backCallback ?: OnBackInvokedCallback { riderPage.onBack() }.also { backCallback = it }
+        onBackInvokedDispatcher.unregisterOnBackInvokedCallback(cb)
+        if (on && tab == 1) onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (tab == 1 && riderPage.onBack()) return
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
+
     private fun showTab(i: Int) {
         tab = i
         weatherPage.visibility = if (i == 0) View.VISIBLE else View.GONE
         riderPage.root.visibility = if (i == 1) View.VISIBLE else View.GONE
         if (i == 1) riderPage.onShow() else riderPage.onHide()
+        setRiderBackHandler(i == 1 && riderPage.inDetail)
         for ((k, v) in tabViews.withIndex()) {
             val on = k == i
             v.alpha = if (on) 1f else 0.5f

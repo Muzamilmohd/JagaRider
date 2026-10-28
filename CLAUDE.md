@@ -92,9 +92,10 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   Anonymous Auth (identitytoolkit signUp / securetoken refresh) + Realtime Database (Singapore). Config lives in
   **`firebase.properties`** (gitignored, keep a backup: `dbUrl=…`, `apiKey=…`) → `BuildConfig.FIREBASE_DB/KEY`.
   Without it the Riders tab shows "not set up".
-- Groups (`RiderGroup.kt`): invite code `JR-XXXX-XXXX-XXXX-XXXX-XXXX` (100-bit secret). gid = SHA-256("gid:"+code)[:32],
+- Groups (`RiderGroup.kt`, v2.5: MULTIPLE groups in prefs JSON "groups"; old single "code"/"name" migrated;
+  `sharing` = set of codes receiving my location): invite code `JR-XXXX-XXXX-XXXX-XXXX-XXXX` (100-bit secret). gid = SHA-256("gid:"+code)[:32],
   AES-GCM key = SHA-256("key:"+code)[:16]. Paths: `groups/{gid}/meta` {n: enc(name), t}, `groups/{gid}/m/{uid}`
-  {d: enc({n,a,o,s}), t: server timestamp}. Server never sees names/locations in clear. One active group per phone.
+  {d: enc({n,a,o,s,b}), t: server timestamp} (b = bearing, optional). Server never sees names/locations in clear.
 - Rules: `firebase/database.rules.json` (paste into console → Realtime Database → Rules → Publish).
 - `LocationShareService`: foreground service (type location) started only by the user's "Start sharing" button;
   GPS/network updates every 5 s, uploads every ≥10 s; Stop in app or notification removes my entry.
@@ -103,3 +104,8 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   (quick-scale disabled), double-tap resets (weather: back to slider area; riders: re-fit);
   after a manual zoom/pan, refreshes keep the view (`userView`).
   auto-zoom to fit; hides riders idle > 2 h, greys > 5 min.
+- RiderPage v2.5: group LIST (active-rider counts, polled 15 s) → tap → group DETAIL (map + rider rows, polled 5 s).
+  Back = OnBackInvokedCallback (targetSdk 36 never calls onBackPressed) registered via `MainActivity.setRiderBackHandler`.
+  Riding (≥ `RiderPage.MOVING_KMH` 5 km/h, fresh): map marker `drawRiding` (🏍️ bob, pulse, speed lines opposite the
+  bearing), positions eased between polls (`moveAnim`, 4.5 s); list row icon wiggles (ObjectAnimator, cancelled on re-render).
+  `LocationShareService.startGroup/stopGroup/stopAll` — one service publishes to every group in `sharing`.
