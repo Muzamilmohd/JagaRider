@@ -117,3 +117,6 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   (30 s) drops expired groups and stops when none left; notification shows the earliest end time.
 - QR (only external libraries in the app): ZXing core generates "JagaRide JR-…"; Google Play services Code Scanner
   (`GmsBarcodeScanning`, no camera permission, module downloaded by Play on first use) scans → `RiderGroup.parse`.
+- v2.7: weather map ⛶ button (FrameLayout overlay) → `openFullMap()` fullscreen Dialog with a second
+  `RainMapView` (`copyFrom(map)`, `fill`, `oneFingerPan` = one-finger drag pans because there is no page to scroll);
+  `render()` keeps it updated via `fullMap`. ✕ / Back closes.

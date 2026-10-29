@@ -160,6 +160,15 @@ class RainMapView(ctx: Context) : View(ctx) {
     private val gestures = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
 
+        // Skrin penuh: satu jari pun boleh gerak peta (tiada halaman untuk diskrol)
+        override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
+            if (!oneFingerPan) return false
+            panBy(dx, dy)
+            userView = true
+            invalidate()
+            return true
+        }
+
         override fun onDoubleTap(e: MotionEvent): Boolean {
             userView = false
             onResetView?.invoke()
@@ -217,13 +226,39 @@ class RainMapView(ctx: Context) : View(ctx) {
         invalidate()
     }
 
+    /** Skrin penuh: seret satu jari untuk gerak peta. */
+    var oneFingerPan = false
+    /** Skrin penuh: peta penuhi tinggi yang ada. */
+    var fill = false
+
+    /** Salin keadaan peta (data, radar, rider, zum & kedudukan) — untuk buka skrin penuh. */
+    fun copyFrom(o: RainMapView) {
+        samples = o.samples
+        overlay = o.overlay
+        overlayNW = o.overlayNW
+        overlaySE = o.overlaySE
+        riderLat = o.riderLat
+        riderLon = o.riderLon
+        centerLat = o.centerLat
+        centerLon = o.centerLon
+        viewKm = o.viewKm
+        circleKm = o.circleKm
+        aroundRider = o.aroundRider
+        showRangeCircle = o.showRangeCircle
+        radarFrame = o.radarFrame
+        riders = o.riders
+        userView = o.userView
+        invalidate()
+    }
+
     /** Tinggi peta = lebar × aspect (tab Rider guna peta lebih tinggi). */
     var aspect = 1f
         set(v) { field = v; requestLayout() }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val s = MeasureSpec.getSize(widthMeasureSpec)
-        setMeasuredDimension(s, (s * aspect).toInt())
+        // fill = penuhi ruang (skrin penuh), kalau tak tinggi = lebar × aspect
+        setMeasuredDimension(s, if (fill) MeasureSpec.getSize(heightMeasureSpec) else (s * aspect).toInt())
     }
 
     /** Interpolasi grid mm/jam → bitmap kecil berwarna ikut tahap (lutsinar bila tiada hujan). */

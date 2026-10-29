@@ -177,7 +177,20 @@ class MainActivity : BaseActivity() {
             // ketik dua kali = kembali ke kawasan slider
             onResetView = { preview(Prefs.rangeKm(this@MainActivity)) }
         }
-        mapCard.addView(map, lp(top = 6))
+        // Peta + butang ⛶ skrin penuh di penjuru kanan atas
+        mapCard.addView(FrameLayout(this).apply {
+            addView(map)
+            addView(label("⛶", 22f, bold = true).apply {
+                gravity = Gravity.CENTER
+                contentDescription = t("Skrin penuh", "Full screen", "全屏", "முழுத் திரை")
+                background = GradientDrawable().apply {
+                    setColor(pal.card)
+                    cornerRadius = dp(12).toFloat()
+                }
+                elevation = dp(3).toFloat()
+                setOnClickListener { openFullMap() }
+            }, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP or Gravity.END).apply { setMargins(0, dp(8), dp(8), 0) })
+        }, lp(top = 6))
         mapCard.addView(label("🤏 " + t(
             "Dua jari: cubit untuk zum / seret untuk gerak · ketik dua kali: kembali",
             "Two fingers: pinch to zoom / drag to move · double-tap: reset",
@@ -258,6 +271,52 @@ class MainActivity : BaseActivity() {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra(EXTRA_CHECK_UPDATE, false)) UpdateUi.check(this, quiet = false) {}
         if (intent.getBooleanExtra(EXTRA_RIDER_TAB, false)) showTab(1)
+    }
+
+    // ------------------------------------------------------------ peta skrin penuh
+
+    /** Peta skrin penuh yang sedang dibuka (dikemas kini bila data baru masuk). */
+    private var fullMap: RainMapView? = null
+
+    /** Buka peta cuaca skrin penuh: satu jari seret, dua jari zum, ketik dua kali kembali, ✕ tutup. */
+    private fun openFullMap() {
+        val dlg = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val fm = RainMapView(this).apply {
+            copyFrom(map)
+            interactive = true
+            oneFingerPan = true
+            fill = true
+            onResetView = { preview(Prefs.rangeKm(this@MainActivity)) }
+        }
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(pal.mapBg)
+            addView(fm, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            addView(label("✕", 22f, bold = true).apply {
+                gravity = Gravity.CENTER
+                contentDescription = t("Tutup", "Close", "关闭", "மூடு")
+                background = GradientDrawable().apply {
+                    setColor(pal.card)
+                    shape = GradientDrawable.OVAL
+                }
+                elevation = dp(4).toFloat()
+                setOnClickListener { dlg.dismiss() }
+            }, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END).apply { setMargins(0, dp(16), dp(16), 0) })
+        }
+        dlg.setContentView(root)
+        dlg.setOnDismissListener { fullMap = null }
+        dlg.show()
+        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+        fullMap = fm
+        android.widget.Toast.makeText(
+            this,
+            t(
+                "☝️ Seret untuk gerak · 🤏 cubit untuk zum · ketik dua kali untuk kembali",
+                "☝️ Drag to move · 🤏 pinch to zoom · double-tap to reset",
+                "☝️ 拖动移动 · 🤏 双指缩放 · 双击复原",
+                "☝️ இழுத்து நகர்த்து · 🤏 பெரிதாக்க சுருக்கு · இருமுறை தட்டி மீட்டமை",
+            ),
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
     }
 
     // ------------------------------------------------------------ tab bawah
@@ -503,6 +562,7 @@ class MainActivity : BaseActivity() {
 
         // Kawasan sekeliling
         map.set(samples, range)
+        fullMap?.let { it.radarFrame = map.radarFrame; it.set(samples, range) } // skrin penuh ikut dikemas kini
         val peninsula = range == Weather.PENINSULA
         val rainy = around.filter { it.mmh >= 0.1 && (peninsula || it.point.distKm <= range * 1.01) }
         // Hujan terdekat / paling lebat: ikut sumber yang sama dengan peta (radar bila zum dekat, model bila jauh)
