@@ -188,10 +188,10 @@ object Route {
         return 2 * 6371.0 * asin(sqrt(h))
     }
 
-    fun get(url: String): String {
+    fun get(url: String, readTimeoutMs: Int = 25_000): String {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
-        conn.readTimeout = 25_000
+        conn.readTimeout = readTimeoutMs
         conn.setRequestProperty("User-Agent", UA)
         conn.setRequestProperty("Accept-Language", I18n.lang.code)
         try {

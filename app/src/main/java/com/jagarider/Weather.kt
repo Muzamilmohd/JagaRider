@@ -226,6 +226,8 @@ object Weather {
     }
 
     val unit: String get() = t("mm/jam", "mm/h", "毫米/小时", "மிமீ/மணி")
+    val kmh: String get() = t("km/j", "km/h", "公里/时", "கி.மீ/ம")
+    val maxWord: String get() = t("maks", "max", "最高", "அதிகபட்சம்")
 
     fun formatKm(km: Double): String = if (km % 1.0 == 0.0) "${km.toInt()} km" else String.format(Locale.US, "%.1f km", km)
 }

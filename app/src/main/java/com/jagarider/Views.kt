@@ -540,7 +540,7 @@ class RainMapView(ctx: Context) : View(ctx) {
             val color = if (stale) Color.GRAY else riderColor(r.uid)
             if (!stale && r.speedKmh >= RiderPage.MOVING_KMH) {
                 drawRiding(c, x, y, r, color, nowUp)
-                label(c, r.name + " · " + String.format(Locale.US, "%.0f km/j", r.speedKmh), x, y - dp(26f))
+                label(c, r.name + " · " + String.format(Locale.US, "%.0f ", r.speedKmh) + Weather.kmh, x, y - dp(26f))
             } else {
                 paint.style = Paint.Style.FILL
                 paint.color = Color.WHITE

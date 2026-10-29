@@ -68,7 +68,7 @@ class RoutePanel(
         results.removeAllViews()
         out.removeAllViews()
         results.addView(act.label(t("Mencari…", "Searching…", "搜索中…", "தேடுகிறது…"), 14f, color = act.pal.sub))
-        work({ Route.search(q, lat, lon) }) { places ->
+        work({ Route.search(q, lat, lon) }, results) { places ->
             results.removeAllViews()
             if (places.isEmpty()) {
                 results.addView(act.label(t("Tempat tak dijumpai", "Place not found", "找不到地点", "இடம் கிடைக்கவில்லை"), 14f, color = act.pal.sub))
@@ -82,7 +82,7 @@ class RoutePanel(
         results.removeAllViews()
         out.removeAllViews()
         out.addView(act.label("🛣️ " + t("Menyemak laluan ke ${p.name}…", "Checking the route to ${p.name}…", "正在检查前往${p.name}的路线…", "${p.name}-க்கான பாதையைச் சரிபார்க்கிறது…"), 14f, color = act.pal.sub))
-        work({ Route.plan(from.first, from.second, p) }) { show(it) }
+        work({ Route.plan(from.first, from.second, p) }, out) { show(it) }
     }
 
     private fun show(plan: Route.Plan) {
@@ -188,7 +188,7 @@ class RoutePanel(
         val (lat, lon) = myLocation() ?: return toast(t("Lokasi belum diketahui", "Location not known yet", "尚未获取位置", "இருப்பிடம் தெரியவில்லை"))
         shelterOut.removeAllViews()
         shelterOut.addView(act.label(t("Mencari tempat berteduh…", "Looking for shelter…", "正在寻找避雨处…", "தங்குமிடம் தேடுகிறது…"), 14f, color = act.pal.sub))
-        work({ Shelter.near(lat, lon) }) { spots ->
+        work({ Shelter.near(lat, lon) }, shelterOut) { spots ->
             shelterOut.removeAllViews()
             if (spots.isEmpty()) {
                 shelterOut.addView(act.label(t("Tiada tempat berteduh dijumpai dalam 8 km", "No shelter found within 8 km", "8公里内找不到避雨处", "8 கி.மீ.க்குள் தங்குமிடம் இல்லை"), 14f, color = act.pal.sub))
@@ -235,16 +235,15 @@ class RoutePanel(
 
     private fun toast(s: String) = Toast.makeText(act, s, Toast.LENGTH_SHORT).show()
 
-    private fun <T> work(job: () -> T, done: (T) -> Unit) {
+    /** Kerja rangkaian di latar; kalau gagal, kosongkan bahagian itu sahaja (bukan keputusan lain). */
+    private fun <T> work(job: () -> T, failClears: LinearLayout, done: (T) -> Unit) {
         Thread {
             val r = runCatching(job)
             main.post {
                 if (act.isDestroyed) return@post
                 r.onSuccess(done).onFailure {
                     toast(t("Gagal (internet?): ", "Failed (internet?): ", "失败（网络？）：", "தோல்வி (இணையம்?): ") + it.message)
-                    out.removeAllViews()
-                    shelterOut.removeAllViews()
-                    results.removeAllViews()
+                    failClears.removeAllViews()
                 }
             }
         }.start()

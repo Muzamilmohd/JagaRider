@@ -248,7 +248,7 @@ class RiderPage(private val act: MainActivity) {
         RideLog.current()?.let { (km, moving, max) ->
             val dur = durText(System.currentTimeMillis() - RideLog.currentStart())
             c.addView(act.label("🏍️ " + t("Ride semasa", "Current ride", "当前骑行", "தற்போதைய பயணம்") +
-                String.format(Locale.US, ": %.1f km · %s · maks %.0f km/j", km, dur, max), 14f, bold = true, color = act.pal.orange), act.lp(top = 6))
+                String.format(Locale.US, ": %.1f km · %s · %s %.0f %s", km, dur, Weather.maxWord, max, Weather.kmh), 14f, bold = true, color = act.pal.orange), act.lp(top = 6))
         }
         c.addView(act.label(t(
             "Rekod dibuat bila anda kongsi lokasi atau ride solo — disimpan dalam phone sahaja.",
@@ -279,8 +279,8 @@ class RiderPage(private val act: MainActivity) {
         for (r in rides.take(5)) {
             val line = fmt.format(java.util.Date(r.start)) + " " + Clock.time(r.start) +
                 String.format(Locale.US, " · %.1f km · %s", r.km, durText(r.end - r.start)) +
-                (if (r.avgKmh > 0) String.format(Locale.US, " · ~%.0f km/j", r.avgKmh) else "") +
-                String.format(Locale.US, " · maks %.0f", r.maxKmh)
+                (if (r.avgKmh > 0) String.format(Locale.US, " · ~%.0f %s", r.avgKmh, Weather.kmh) else "") +
+                String.format(Locale.US, " · %s %.0f", Weather.maxWord, r.maxKmh)
             c.addView(act.label(line, 13f).apply {
                 setPadding(act.dp(10), act.dp(6), act.dp(10), act.dp(6))
                 background = GradientDrawable().apply {
@@ -636,7 +636,7 @@ class RiderPage(private val act: MainActivity) {
         val parts = mutableListOf<String>()
         if (!r.me) parts += Weather.formatKm(Math.round(distKm(myLat, myLon, r.lat, r.lon) * 10) / 10.0)
         parts += when {
-            riding -> t("Sedang ride", "Riding", "骑行中", "பயணத்தில்") + " " + String.format(Locale.US, "%.0f km/j", r.speedKmh) +
+            riding -> t("Sedang ride", "Riding", "骑行中", "பயணத்தில்") + " " + String.format(Locale.US, "%.0f ", r.speedKmh) + Weather.kmh +
                 (if (!r.bearing.isNaN()) " " + Weather.toward(r.bearing) else "")
             stale -> t("Tidak aktif", "Inactive", "不活跃", "செயலில் இல்லை")
             else -> t("Berhenti", "Stopped", "已停下", "நிறுத்தியுள்ளார்")
@@ -656,7 +656,7 @@ class RiderPage(private val act: MainActivity) {
         row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         if (riding) {
             row.addView(act.label(String.format(Locale.US, "%.0f", r.speedKmh), 22f, bold = true, color = act.pal.orange).apply { setPadding(act.dp(8), 0, 0, 0) })
-            row.addView(act.label("km/j", 11f, color = act.pal.sub).apply { setPadding(act.dp(2), act.dp(8), 0, 0) })
+            row.addView(act.label(Weather.kmh, 11f, color = act.pal.sub).apply { setPadding(act.dp(2), act.dp(8), 0, 0) })
         }
         return row
     }
