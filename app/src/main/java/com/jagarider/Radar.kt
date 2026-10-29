@@ -184,6 +184,25 @@ object Radar {
         return Scan(f, center, nearest, heaviest, heaviestNear)
     }
 
+    /** Hujan radar di satu titik (mm/jam, maks dalam ~1.5 km). Null kalau radar tak dapat dicapai. */
+    fun mmhAt(lat: Double, lon: Double): Double? {
+        val f = latest() ?: return null
+        val world = 256.0 * (1 shl ZOOM)
+        val px = floor(mercX(lon) * world).toInt()
+        val py = floor(mercY(lat) * world).toInt()
+        var best = 0.0
+        var any = false
+        for (dy in -1..1) for (dx in -1..1) {
+            val x = px + dx
+            val y = py + dy
+            val bmp = tile(f, Math.floorDiv(x, 256), Math.floorDiv(y, 256)) ?: continue
+            any = true
+            val d = dbz(bmp.getPixel(Math.floorMod(x, 256), Math.floorMod(y, 256))) ?: continue
+            best = maxOf(best, mmh(d))
+        }
+        return if (any) best else null
+    }
+
     private fun tile(f: Frame, x: Int, y: Int): Bitmap? {
         val n = 1 shl ZOOM
         if (y < 0 || y >= n) return null

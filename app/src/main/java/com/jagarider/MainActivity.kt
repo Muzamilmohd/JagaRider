@@ -199,6 +199,12 @@ class MainActivity : BaseActivity() {
         ), 12f, color = pal.sub).apply { gravity = Gravity.CENTER })
         nearestText = label("", 15f)
         mapCard.addView(nearestText, lp(top = 6))
+        routePanel = RoutePanel(this, { listOfNotNull(map, fullMap) }, { lastLocation?.let { it.latitude to it.longitude } ?: Prefs.lastLocation(this) })
+        mapCard.addView(routePanel.shelterView)
+
+        // Hujan di laluan
+        col.addView(header("🛣️ " + t("Hujan di laluan", "Rain on your route", "沿途降雨", "பாதையில் மழை")))
+        col.addView(routePanel.routeCard, lp(top = 8))
 
         // Ramalan 2 jam
         col.addView(header(t("2 jam akan datang (lokasi anda)", "Next 2 hours (your location)", "未来2小时（您的位置）", "அடுத்த 2 மணி நேரம் (உங்கள் இடம்)")))
@@ -277,6 +283,7 @@ class MainActivity : BaseActivity() {
 
     /** Peta skrin penuh yang sedang dibuka (dikemas kini bila data baru masuk). */
     private var fullMap: RainMapView? = null
+    private lateinit var routePanel: RoutePanel
 
     /** Buka peta cuaca skrin penuh: satu jari seret, dua jari zum, ketik dua kali kembali, ✕ tutup. */
     private fun openFullMap() {
@@ -678,6 +685,11 @@ class MainActivity : BaseActivity() {
             cornerRadius = dp(10).toFloat()
         }
         verdictText.visibility = View.VISIBLE
+        // Widget skrin utama ikut data terkini
+        RainWidget.update(
+            this, emoji(center), level.label + String.format(Locale.US, " · %.1f ", center.mmh) + Weather.unit,
+            if (level == Weather.Level.NONE) 0xFF2E7D32.toInt() else level.color, forecastText.text.toString(),
+        )
     }
 
     /** "Hujan terdekat: ~12.5 km arah Timur Laut (Renyai)" dalam bahasa semasa. */

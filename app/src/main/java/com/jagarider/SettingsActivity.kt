@@ -199,6 +199,28 @@ class SettingsActivity : BaseActivity() {
             lp(top = 6),
         )
 
+        // Amaran suara (speaker / headset helmet)
+        alertCard.addView(LinearLayout(this).apply {
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(Switch(this@SettingsActivity).apply {
+                text = "🔊 " + t("Amaran suara (dengar melalui headset helmet)", "Voice alert (hear it in your helmet headset)", "语音提醒（通过头盔耳机收听）", "குரல் எச்சரிக்கை (ஹெல்மெட் ஹெட்செட்டில்)")
+                textSize = 15f
+                setTextColor(pal.text)
+                isChecked = Prefs.voiceAlert(this@SettingsActivity)
+                setOnCheckedChangeListener { _, on -> Prefs.setVoiceAlert(this@SettingsActivity, on) }
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(pill("▶") {
+                val msg = t(
+                    "Ujian JagaRide. Hujan lebat tiga kilometer di hadapan. Bawa baju hujan.",
+                    "JagaRide test. Heavy rain three kilometres ahead. Bring a raincoat.",
+                    "JagaRide 测试。前方三公里有大雨。请带雨衣。",
+                    "JagaRide சோதனை. மூன்று கிலோமீட்டர் முன்னால் கனமழை. மழைக்கோட் எடுக்கவும்.",
+                )
+                val app = applicationContext
+                Thread { Speech.speakBlocking(app, msg) }.start()
+            }, LinearLayout.LayoutParams(dp(56), LinearLayout.LayoutParams.WRAP_CONTENT))
+        }, lp(top = 8))
+
         // Lokasi untuk amaran: live (sepanjang masa) atau lokasi terakhir semasa app dibuka
         locStatus = label("", 14f, bold = true)
         alertCard.addView(locStatus, lp(top = 8))
@@ -213,6 +235,24 @@ class SettingsActivity : BaseActivity() {
             addView(pill("⛈️ " + t("Cuba bunyi ribut", "Test storm", "试听雷雨", "புயல் ஒலி")) { RainAlert.test(this@SettingsActivity, RainAlert.STORM) },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(4), 0, 0, 0) })
         }, lp(top = 8))
+
+        // Ride: mod jimat bateri
+        col.addView(header("🏍️ " + t("Ride", "Riding", "骑行", "பயணம்")))
+        val rideCard = card()
+        col.addView(rideCard, lp(top = 8))
+        rideCard.addView(Switch(this).apply {
+            text = "🔋 " + t("Mod jimat bateri (ride jauh)", "Battery saver (long rides)", "省电模式（长途骑行）", "பேட்டரி சேமிப்பு (நீண்ட பயணம்)")
+            textSize = 15f
+            setTextColor(pal.text)
+            isChecked = Prefs.batterySaver(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on -> Prefs.setBatterySaver(this@SettingsActivity, on) }
+        })
+        rideCard.addView(label(t(
+            "Kongsi lokasi setiap 30 saat (bukan 10 saat) dan GPS lebih jarang. Mula berkesan pada kongsi / ride seterusnya.",
+            "Shares location every 30 s (instead of 10 s) with less frequent GPS. Takes effect on the next share / ride.",
+            "每30秒（而非10秒）共享一次位置，GPS 更少更新。下次共享/骑行时生效。",
+            "30 வினாடிக்கு ஒருமுறை (10 அல்ல) இருப்பிடம் பகிரும், GPS குறைவாக. அடுத்த பயணத்தில் நடைமுறைக்கு வரும்.",
+        ), 13f, color = pal.sub))
 
         // Kemas kini app
         col.addView(header(t("Kemas kini app", "App updates", "应用更新", "ஆப் புதுப்பிப்புகள்")))

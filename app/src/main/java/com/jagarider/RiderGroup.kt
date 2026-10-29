@@ -240,4 +240,74 @@ object RiderGroup {
             }.getOrNull()
         }.toList()
     }
+
+    // ------------------------------------------------------------ mesej pantas & titik berkumpul
+
+    /** Mesej pantas — tekan satu butang semasa ride, tanpa menaip. Teks ikut bahasa penerima. */
+    enum class Quick(val icon: String) {
+        FUEL("⛽"), WAIT("✋"), BREAKDOWN("🔧"), ARRIVED("✅"), GO("🏍️"), FOOD("🍜"), RAIN("🌧️"), POLICE("🚓");
+
+        val text: String
+            get() = when (this) {
+                FUEL -> t("Isi minyak", "Refuelling", "加油", "எரிபொருள் நிரப்புகிறேன்")
+                WAIT -> t("Tunggu kejap", "Wait for me", "等一下", "கொஞ்சம் காத்திருங்கள்")
+                BREAKDOWN -> t("Motor rosak / pancit", "Bike trouble / puncture", "车坏了/爆胎", "வண்டி பழுது / பஞ்சர்")
+                ARRIVED -> t("Dah sampai", "Arrived", "已到达", "வந்துவிட்டேன்")
+                GO -> t("Jom gerak", "Let's go", "出发吧", "புறப்படலாம்")
+                FOOD -> t("Singgah makan", "Food stop", "停下吃饭", "சாப்பிட நிறுத்தம்")
+                RAIN -> t("Hujan, berteduh dulu", "Raining, taking shelter", "下雨了，先避雨", "மழை, ஒதுங்குகிறேன்")
+                POLICE -> t("Ada sekatan polis", "Police roadblock ahead", "前方有警察路障", "காவல் சோதனைச் சாவடி")
+            }
+    }
+
+    data class Msg(val uid: String, val name: String, val quick: Quick, val time: Long, val me: Boolean)
+
+    /** Titik berkumpul kumpulan (sesiapa boleh letak / buang). */
+    data class Meet(val lat: Double, val lon: Double, val label: String, val by: String, val time: Long)
+
+    /** Hantar mesej pantas (satu mesej terkini bagi setiap rider). */
+    fun sendQuick(c: Context, g: Group, q: Quick) {
+        val uid = Firebase.uid(c) ?: Firebase.token(c).let { Firebase.uid(c)!! }
+        val plain = JSONObject().put("n", riderName(c).ifBlank { "Rider" }).put("k", q.name).toString()
+        Firebase.put(c, "groups/${g.gid}/q/$uid", JSONObject().put("d", encrypt(g.key, plain)).put("t", serverTime()).toString())
+    }
+
+    fun fetchQuick(c: Context, g: Group): List<Msg> {
+        val json = Firebase.get(c, "groups/${g.gid}/q")
+        if (json == "null") return emptyList()
+        val me = Firebase.uid(c)
+        val o = JSONObject(json)
+        return o.keys().asSequence().mapNotNull { uid ->
+            runCatching {
+                val e = o.getJSONObject(uid)
+                val d = JSONObject(decrypt(g.key, e.getString("d")))
+                Msg(uid, d.optString("n", "Rider"), Quick.valueOf(d.getString("k")), e.optLong("t"), uid == me)
+            }.getOrNull()
+        }.sortedByDescending { it.time }.toList()
+    }
+
+    fun setMeet(c: Context, g: Group, lat: Double, lon: Double, label: String) {
+        val plain = JSONObject().put("a", lat).put("o", lon).put("l", label.take(60)).put("n", riderName(c).ifBlank { "Rider" }).toString()
+        Firebase.put(c, "groups/${g.gid}/p", JSONObject().put("d", encrypt(g.key, plain)).put("t", serverTime()).toString())
+    }
+
+    fun clearMeet(c: Context, g: Group) {
+        Firebase.delete(c, "groups/${g.gid}/p")
+    }
+
+    fun fetchMeet(c: Context, g: Group): Meet? {
+        val json = Firebase.get(c, "groups/${g.gid}/p")
+        if (json == "null") return null
+        return runCatching {
+            val e = JSONObject(json)
+            val d = JSONObject(decrypt(g.key, e.getString("d")))
+            Meet(d.getDouble("a"), d.getDouble("o"), d.optString("l"), d.optString("n"), e.optLong("t"))
+        }.getOrNull()
+    }
+
+    /** Masa mesej pantas terakhir yang dah dimaklumkan (per kumpulan) — elak notifikasi berulang. */
+    fun lastSeenQuick(c: Context, g: Group): Long = sp(c).getLong("seen_q_${g.code}", 0L)
+    fun setLastSeenQuick(c: Context, g: Group, t: Long) {
+        sp(c).edit().putLong("seen_q_${g.code}", t).apply()
+    }
 }

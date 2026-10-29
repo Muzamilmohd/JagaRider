@@ -41,6 +41,18 @@ object Prefs {
         sp(c).edit().putBoolean("rain_alert", on).apply()
     }
 
+    /** Mod jimat bateri: kongsi lokasi setiap 30 s (bukan 10 s), GPS lebih jarang — untuk ride jauh. */
+    fun batterySaver(c: Context): Boolean = sp(c).getBoolean("battery_saver", false)
+    fun setBatterySaver(c: Context, on: Boolean) {
+        sp(c).edit().putBoolean("battery_saver", on).apply()
+    }
+
+    /** Amaran hujan juga disuarakan (speaker / headset helmet). */
+    fun voiceAlert(c: Context): Boolean = sp(c).getBoolean("voice_alert", true)
+    fun setVoiceAlert(c: Context, on: Boolean) {
+        sp(c).edit().putBoolean("voice_alert", on).apply()
+    }
+
     /** Jarak kawasan amaran hujan (km). */
     fun alertKm(c: Context): Int = sp(c).getInt("alert_km", 10)
     fun setAlertKm(c: Context, km: Int) {

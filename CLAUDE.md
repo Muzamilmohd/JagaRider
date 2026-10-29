@@ -120,3 +120,20 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
 - v2.7: weather map ⛶ button (FrameLayout overlay) → `openFullMap()` fullscreen Dialog with a second
   `RainMapView` (`copyFrom(map)`, `fill`, `oneFingerPan` = one-finger drag pans because there is no page to scroll);
   `render()` keeps it updated via `fullMap`. ✕ / Back closes.
+
+## v3.0 (route rain, group ride tools, extras)
+- `Route.kt`: Nominatim search/reverse (UA, ≤1 req/s), OSRM public route (overview=full), samples every max(3, d/40) km;
+  Open-Meteo minutely_15 (8 h, timezone=GMT) at each sample's ETA + `Radar.mmhAt` for parts reached within 30 min;
+  wet segments + best departure (delay 30–120 min if rain halves). UI = `RoutePanel` (weather tab): search → plan →
+  verdict, wet km ranges with time/place, 🧭 Google Maps (mode=l, motorcycle) intent, route drawn on map coloured by rain.
+- `Shelter.kt`: Overpass (bridge=yes major roads, fuel, bus_stop shelter=yes, amenity=shelter) within 3/8 km → list + map icons.
+- `Speech.kt`: TTS voice alerts (`Prefs.voiceAlert`, Settings toggle + ▶ test); RainAlert speaks its message.
+- Group: `RiderGroup.Quick` messages at `groups/{gid}/q/{uid}` and meeting point at `groups/{gid}/p` (both encrypted,
+  need the v3.0 rules). RiderPage: quick-message bar + feed, 🚩 meeting point (my location / search / navigate / remove)
+  with per-rider ETA, trails (local, while page open). `LocationShareService.groupTick` (20 s, 60 s in saver) notifies +
+  speaks new quick messages and left-behind (> `LEFT_BEHIND_KM` 3 km) / stopped (> 5 min) riders while I'm moving.
+- `RideLog.kt`: ride stats from the share service (accuracy ≤ 35 m, jumps > 250 km/h ignored), solo ride
+  (`startSolo/stopSolo`, service runs with no groups), last 30 rides in prefs; Rider tab "📊 Rekod ride" card.
+- `Prefs.batterySaver`: share every 30 s, GPS 10 s/25 m.
+- `RainWidget` (home-screen, RemoteViews `widget_rain.xml`): updated by MainActivity.render and RainAlertJob
+  (job now also scheduled when a widget exists even if rain alerts are off).

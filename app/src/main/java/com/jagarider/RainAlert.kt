@@ -45,7 +45,8 @@ object RainAlert {
     fun schedule(ctx: Context) {
         try {
             val js = ctx.getSystemService(JobScheduler::class.java)
-            if (!Prefs.rainAlert(ctx)) {
+            // Semakan latar juga perlu untuk widget skrin utama
+            if (!Prefs.rainAlert(ctx) && !RainWidget.has(ctx)) {
                 js.cancel(JOB_ID)
                 return
             }
@@ -101,6 +102,28 @@ object RainAlert {
             else -> NONE
         }
 
+        // Widget skrin utama: tahap hujan sekarang (radar) + bila hujan dijangka
+        val nowLevel = Weather.Level.of(centerMmh)
+        val firstWet = me.nextMmh.indexOfFirst { it >= 0.1 }
+        val next = when {
+            centerMmh >= 0.1 -> me.nextMmh.indexOfFirst { it < 0.1 }.let { i ->
+                if (i >= 0) t("Reda ~", "Easing ~", "约", "~") + Clock.hm(me.nextTimes[i]) + t("", "", "雨停", " குறையும்")
+                else t("Hujan berterusan 2 jam", "Rain for the next 2 h", "未来2小时持续下雨", "2 மணி நேரம் மழை")
+            }
+            firstWet >= 0 -> t("Hujan ~", "Rain ~", "约", "மழை ~") + Clock.hm(me.nextTimes[firstWet]) + t("", "", "下雨", "")
+            near != null -> t("Hujan ", "Rain ", "", "மழை ") + Weather.formatKm(Math.round(near.distKm * 10) / 10.0) + " " + Weather.toward(near.bearing)
+            else -> t("Tiada hujan dalam 2 jam", "No rain for 2 hours", "2小时内无雨", "2 மணி நேரம் மழை இல்லை")
+        }
+        val code = if (centerMmh >= 0.1 && me.code < 51) 61 else me.code
+        runCatching {
+            RainWidget.update(
+                ctx, Weather.icon(code, java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())),
+                nowLevel.label + String.format(java.util.Locale.US, " · %.1f ", centerMmh) + Weather.unit,
+                if (nowLevel == Weather.Level.NONE) 0xFF2E7D32.toInt() else nowLevel.color, next,
+            )
+        }
+        if (!Prefs.rainAlert(ctx)) return true // hanya widget, tiada notifikasi
+
         val last = Prefs.alertState(ctx)
         val since = System.currentTimeMillis() - Prefs.alertTime(ctx)
         if (level == NONE) {
@@ -111,6 +134,7 @@ object RainAlert {
         if (level > last || since > REPEAT_MS) {
             val msg = message(centerMmh, near, heaviest, me, soonMmh, thunder, km)
             notify(ctx, level, msg)
+            Speech.speakBlocking(ctx, msg) // di thread job — tunggu sehingga habis cakap
             Prefs.setAlertState(ctx, level, System.currentTimeMillis())
         } else {
             Prefs.setAlertState(ctx, level, Prefs.alertTime(ctx))

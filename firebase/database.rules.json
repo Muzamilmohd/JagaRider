@@ -12,6 +12,16 @@
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.hasChildren(['d', 't']) && newData.child('d').isString() && newData.child('d').val().length < 1000 && newData.child('t').isNumber()"
           }
+        },
+        "q": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['d', 't']) && newData.child('d').isString() && newData.child('d').val().length < 600 && newData.child('t').isNumber()"
+          }
+        },
+        "p": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['d', 't']) && newData.child('d').isString() && newData.child('d').val().length < 600 && newData.child('t').isNumber()"
         }
       }
     }

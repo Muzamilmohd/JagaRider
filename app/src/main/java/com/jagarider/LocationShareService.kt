@@ -44,7 +44,7 @@ class LocationShareService : Service(), LocationListener {
             }
             if (changed) {
                 val left = sharedGroups(this@LocationShareService)
-                if (left.isEmpty()) {
+                if (left.isEmpty() && !RideLog.solo(this@LocationShareService)) {
                     running = false
                     stopSelf()
                     return
@@ -53,6 +53,91 @@ class LocationShareService : Service(), LocationListener {
             }
             worker.postDelayed(this, 30_000L)
         }
+    }
+
+    /** Setiap 20 saat semasa berkongsi: mesej pantas baru + amaran rider tertinggal / berhenti lama. */
+    private val groupTick = object : Runnable {
+        override fun run() {
+            runCatching { watchGroups() }
+            worker.postDelayed(this, if (Prefs.batterySaver(this@LocationShareService)) 60_000L else 20_000L)
+        }
+    }
+    private val stillSince = HashMap<String, Pair<Pair<Double, Double>, Long>>()
+    private val alerted = HashMap<String, Long>()
+
+    private fun once(key: String): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - (alerted[key] ?: 0L) < 15 * 60_000L) return false
+        alerted[key] = now
+        return true
+    }
+
+    private fun watchGroups() {
+        val now = System.currentTimeMillis()
+        val me = last
+        val iAmMoving = me != null && me.hasSpeed() && me.speed * 3.6 >= 10
+        for (g in sharedGroups(this)) {
+            // 1. Mesej pantas dari ahli lain
+            val seen = RiderGroup.lastSeenQuick(this, g)
+            val msgs = runCatching { RiderGroup.fetchQuick(this, g) }.getOrDefault(emptyList())
+            if (seen == 0L) {
+                RiderGroup.setLastSeenQuick(this, g, now) // kali pertama: jangan bising dengan mesej lama
+            } else {
+                val fresh = msgs.filter { !it.me && it.time > seen && now - it.time < 10 * 60_000L }.sortedBy { it.time }
+                for (m in fresh) groupAlert(g, "${m.quick.icon} ${m.name}: ${m.quick.text}", "${m.name}: ${m.quick.text}")
+                msgs.maxOfOrNull { it.time }?.let { if (it > seen) RiderGroup.setLastSeenQuick(this, g, it) }
+            }
+
+            // 2. Rider tertinggal jauh / berhenti lama (hanya bila saya sedang ride)
+            if (me == null) continue
+            val riders = runCatching { RiderGroup.fetch(this, g) }.getOrDefault(emptyList())
+                .filter { !it.me && now - it.time < 3 * 60_000L }
+            for (r in riders) {
+                val d = Route.km(me.latitude to me.longitude, r.lat to r.lon)
+                if (iAmMoving && d > LEFT_BEHIND_KM && once("far:${g.code}:${r.uid}")) {
+                    val km = String.format(java.util.Locale.US, "%.1f", d)
+                    groupAlert(
+                        g,
+                        "📏 " + t("${r.name} jauh $km km dari anda", "${r.name} is $km km away from you", "${r.name}离您${km}公里", "${r.name} உங்களிடமிருந்து $km கி.மீ. தொலைவில்"),
+                        t("${r.name} jauh $km kilometer", "${r.name} is $km kilometres away", "${r.name}离您${km}公里", "${r.name} $km கிலோமீட்டர் தொலைவில்"),
+                    )
+                }
+                val prev = stillSince[r.uid]
+                if (prev == null || Route.km(prev.first, r.lat to r.lon) > 0.15) {
+                    stillSince[r.uid] = (r.lat to r.lon) to now
+                } else if (iAmMoving && now - prev.second > 5 * 60_000L && once("stop:${g.code}:${r.uid}")) {
+                    val min = (now - prev.second) / 60_000L
+                    groupAlert(
+                        g,
+                        "⏸️ " + t("${r.name} berhenti $min minit — mungkin ada masalah?", "${r.name} has stopped for $min min — any trouble?", "${r.name}已停下${min}分钟——是否有问题？", "${r.name} $min நிமி. நின்றுள்ளார் — ஏதேனும் பிரச்சனையா?"),
+                        t("${r.name} berhenti $min minit", "${r.name} has stopped for $min minutes", "${r.name}已停下${min}分钟", "${r.name} $min நிமிடம் நின்றுள்ளார்"),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Notifikasi kumpulan (berbunyi) + suara kalau dihidupkan. Di thread worker. */
+    @SuppressLint("MissingPermission")
+    private fun groupAlert(g: RiderGroup.Group, text: String, spoken: String) {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(CH_GROUP, t("Mesej kumpulan rider", "Rider group messages", "骑手群组消息", "ரைடர் குழு செய்திகள்"), NotificationManager.IMPORTANCE_HIGH)
+        )
+        val open = PendingIntent.getActivity(
+            this, 5, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_RIDER_TAB, true)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val n = Notification.Builder(this, CH_GROUP)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle(g.icon + " " + g.name)
+            .setContentText(text)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        runCatching { nm.notify((System.currentTimeMillis() % 100000).toInt() + 10000, n) }
+        Speech.speakBlocking(this, spoken)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -70,7 +155,8 @@ class LocationShareService : Service(), LocationListener {
             return START_NOT_STICKY
         }
         val groups = sharedGroups(this)
-        if (groups.isEmpty() || !Firebase.enabled) {
+        val solo = RideLog.solo(this)
+        if ((groups.isEmpty() || !Firebase.enabled) && !solo) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -79,13 +165,21 @@ class LocationShareService : Service(), LocationListener {
         else startForeground(NOTIF_ID, n)
         running = true
         lastSent = 0L // kumpulan baru ditambah — hantar segera pada lokasi seterusnya
+        RideLog.begin(this)
+        RideLog.label = if (groups.isEmpty()) t("Ride solo", "Solo ride", "单人骑行", "தனிப் பயணம்") else groups.joinToString(", ") { it.name }
         worker.removeCallbacks(expiryTick)
         worker.postDelayed(expiryTick, 30_000L)
+        worker.removeCallbacks(groupTick)
+        worker.postDelayed(groupTick, 5_000L)
         try {
             val lm = getSystemService(LocationManager::class.java)
             lm.removeUpdates(this)
             for (p in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
-                if (p in lm.getProviders(true)) lm.requestLocationUpdates(p, 3_000L, 5f, this, worker.looper)
+                // Mod jimat bateri: kemas kini lokasi lebih jarang
+                if (p in lm.getProviders(true)) {
+                    if (Prefs.batterySaver(this)) lm.requestLocationUpdates(p, 10_000L, 25f, this, worker.looper)
+                    else lm.requestLocationUpdates(p, 3_000L, 5f, this, worker.looper)
+                }
             }
         } catch (_: SecurityException) {
             stopAll(this)
@@ -100,8 +194,9 @@ class LocationShareService : Service(), LocationListener {
             loc.time - prev.time < 30_000L
         ) return
         last = loc
+        RideLog.add(loc)
         val now = System.currentTimeMillis()
-        if (now - lastSent < 10_000L) return
+        if (now - lastSent < (if (Prefs.batterySaver(this)) 30_000L else 10_000L)) return
         lastSent = now
         val speed = if (loc.hasSpeed()) loc.speed * 3.6 else 0.0
         val bearing = if (loc.hasBearing() && speed >= 3) loc.bearing.toDouble() else Double.NaN
@@ -117,6 +212,7 @@ class LocationShareService : Service(), LocationListener {
     override fun onProviderDisabled(provider: String) {}
 
     override fun onDestroy() {
+        RideLog.finish(this)
         running = false
         runCatching { getSystemService(LocationManager::class.java).removeUpdates(this) }
         worker.looper.quitSafely()
@@ -124,10 +220,12 @@ class LocationShareService : Service(), LocationListener {
     }
 
     private fun notification(list: List<RiderGroup.Group>): Notification {
-        val groups = list.joinToString(", ") { it.icon + " " + it.name }
+        val groups = if (list.isEmpty()) "🏍️ " + t("Ride solo", "Solo ride", "单人骑行", "தனிப் பயணம்") else list.joinToString(", ") { it.icon + " " + it.name }
         // tempoh tamat paling awal (0 = sehingga ditekan Henti)
         val end = list.map { RiderGroup.shareUntil(this, it.code) }.filter { it > 0 }.minOrNull()
-        val text = if (end != null) {
+        val text = if (list.isEmpty()) {
+            t("Merekod ride anda (jarak, masa, laju).", "Recording your ride (distance, time, speed).", "正在记录您的骑行（距离、时间、速度）。", "உங்கள் பயணம் பதிவாகிறது (தூரம், நேரம், வேகம்).")
+        } else if (end != null) {
             val at = Clock.time(end)
             t("Sehingga $at. Ahli kumpulan nampak lokasi anda.", "Until $at. Group members can see where you are.", "直到${at}。群组成员可以看到您的位置。", "$at வரை. குழு உறுப்பினர்கள் உங்கள் இருப்பிடத்தைப் பார்க்கலாம்.")
         } else {
@@ -159,6 +257,9 @@ class LocationShareService : Service(), LocationListener {
     companion object {
         private const val NOTIF_ID = 4345
         private const val CH = "rider_share"
+        private const val CH_GROUP = "rider_group_msg"
+        /** Amaran bila rider lain lebih jauh dari ini (km) semasa saya sedang ride. */
+        private const val LEFT_BEHIND_KM = 3.0
         private const val ACTION_STOP = "com.jagarider.STOP_SHARE"
 
         @Volatile
@@ -184,7 +285,7 @@ class LocationShareService : Service(), LocationListener {
             RiderGroup.setSharing(c, g.code, false)
             val app = c.applicationContext
             Thread { runCatching { RiderGroup.removeMe(app, g) } }.start()
-            if (RiderGroup.sharing(c).isEmpty()) {
+            if (RiderGroup.sharing(c).isEmpty() && !RideLog.solo(c)) {
                 c.stopService(Intent(c, LocationShareService::class.java))
                 running = false
             } else {
@@ -192,10 +293,27 @@ class LocationShareService : Service(), LocationListener {
             }
         }
 
+        /** Ride solo: rekod jarak / masa / laju tanpa kongsi dengan kumpulan. */
+        fun startSolo(c: Context) {
+            RideLog.setSolo(c, true)
+            c.startForegroundService(Intent(c, LocationShareService::class.java))
+        }
+
+        fun stopSolo(c: Context) {
+            RideLog.setSolo(c, false)
+            if (RiderGroup.sharing(c).isEmpty()) {
+                c.stopService(Intent(c, LocationShareService::class.java))
+                running = false
+            } else {
+                c.startForegroundService(Intent(c, LocationShareService::class.java))
+            }
+        }
+
         /** Henti semua dan buang lokasi saya dari semua kumpulan. */
         fun stopAll(c: Context) {
             val groups = sharedGroups(c)
             RiderGroup.clearSharing(c)
+            RideLog.setSolo(c, false)
             c.stopService(Intent(c, LocationShareService::class.java))
             running = false
             val app = c.applicationContext

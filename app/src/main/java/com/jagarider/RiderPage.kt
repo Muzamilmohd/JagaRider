@@ -49,6 +49,11 @@ class RiderPage(private val act: MainActivity) {
     private var statusText: TextView? = null
     private var shareBtn: Button? = null
     private var riders: List<RiderGroup.Rider> = emptyList()
+    private var msgs: List<RiderGroup.Msg> = emptyList()
+    private var meet: RiderGroup.Meet? = null
+    private val trails = HashMap<String, MutableList<Pair<Double, Double>>>()
+    private var msgFeed: LinearLayout? = null
+    private var meetInfo: TextView? = null
     private val animators = mutableListOf<ValueAnimator>()
 
     // halaman senarai: bilangan rider aktif setiap kumpulan
@@ -70,6 +75,7 @@ class RiderPage(private val act: MainActivity) {
     fun onShow() {
         visible = true
         // Rider pernah tekan "Mula kongsi" tapi servis terhenti (phone restart / app dikemas kini) — sambung semula
+        if (RideLog.solo(act) && !LocationShareService.running && hasLocation()) LocationShareService.startSolo(act)
         if (Firebase.enabled && RiderGroup.sharing(act).isNotEmpty() && !LocationShareService.running && hasLocation()) {
             RiderGroup.groups(act).firstOrNull { it.code in RiderGroup.sharing(act) }?.let { LocationShareService.startGroup(act, it) }
         }
@@ -94,6 +100,9 @@ class RiderPage(private val act: MainActivity) {
     private fun open(code: String?) {
         selected = code
         riders = emptyList()
+        msgs = emptyList()
+        meet = null
+        trails.clear()
         act.setRiderBackHandler(code != null)
         build()
         // Nama / ikon mungkin ditukar oleh ahli lain — semak pelayan
@@ -115,6 +124,8 @@ class RiderPage(private val act: MainActivity) {
         list = null
         statusText = null
         shareBtn = null
+        msgFeed = null
+        meetInfo = null
         rowInfo.clear()
         col.addView(LinearLayout(act).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -143,6 +154,7 @@ class RiderPage(private val act: MainActivity) {
             selected = null
             buildNameCard()
             buildList()
+            buildRides()
         } else {
             buildDetail(g)
         }
@@ -212,6 +224,79 @@ class RiderPage(private val act: MainActivity) {
         }, act.lp(top = 8))
     }
 
+    /** Ride solo (rekod tanpa kumpulan) + rekod ride terkini. */
+    private fun buildRides() {
+        val c = act.card()
+        col.addView(c, act.lp(top = 12))
+        c.addView(act.label("📊 " + t("Rekod ride", "Ride log", "骑行记录", "பயணப் பதிவு"), 18f, bold = true))
+        val solo = RideLog.solo(act) && LocationShareService.running
+        c.addView(act.pill(
+            if (solo) "⏹ " + t("Tamat ride solo", "End solo ride", "结束单人骑行", "தனிப் பயணத்தை முடி")
+            else "▶ " + t("Mula ride solo (rekod sahaja)", "Start solo ride (record only)", "开始单人骑行（仅记录）", "தனிப் பயணம் தொடங்கு (பதிவு மட்டும்)"),
+            primary = !solo,
+        ) {
+            if (solo) {
+                LocationShareService.stopSolo(act)
+            } else if (!hasLocation()) {
+                act.requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 21)
+                return@pill
+            } else {
+                LocationShareService.startSolo(act)
+            }
+            main.postDelayed({ build() }, 800)
+        }, act.lp(top = 6))
+        RideLog.current()?.let { (km, moving, max) ->
+            val dur = durText(System.currentTimeMillis() - RideLog.currentStart())
+            c.addView(act.label("🏍️ " + t("Ride semasa", "Current ride", "当前骑行", "தற்போதைய பயணம்") +
+                String.format(Locale.US, ": %.1f km · %s · maks %.0f km/j", km, dur, max), 14f, bold = true, color = act.pal.orange), act.lp(top = 6))
+        }
+        c.addView(act.label(t(
+            "Rekod dibuat bila anda kongsi lokasi atau ride solo — disimpan dalam phone sahaja.",
+            "Rides are recorded while you share location or ride solo — stored on this phone only.",
+            "共享位置或单人骑行时会记录——仅保存在此手机。",
+            "இருப்பிடம் பகிரும்போது அல்லது தனிப் பயணத்தில் பதிவாகும் — இந்த தொலைபேசியில் மட்டும்.",
+        ), 12f, color = act.pal.sub))
+
+        val rides = RideLog.rides(act)
+        if (rides.isEmpty()) return
+        // Jumlah bulan ini
+        val cal = java.util.Calendar.getInstance()
+        val month = rides.filter {
+            val k = java.util.Calendar.getInstance().apply { timeInMillis = it.start }
+            k.get(java.util.Calendar.MONTH) == cal.get(java.util.Calendar.MONTH) && k.get(java.util.Calendar.YEAR) == cal.get(java.util.Calendar.YEAR)
+        }
+        if (month.isNotEmpty()) {
+            val n = month.size
+            val km = month.sumOf { it.km }
+            c.addView(act.label("🗓️ " + t(
+                String.format(Locale.US, "Bulan ini: %d ride · %.0f km", n, km),
+                String.format(Locale.US, "This month: %d rides · %.0f km", n, km),
+                String.format(Locale.US, "本月：%d 次骑行 · %.0f 公里", n, km),
+                String.format(Locale.US, "இந்த மாதம்: %d பயணம் · %.0f கி.மீ.", n, km),
+            ), 15f, bold = true), act.lp(top = 8))
+        }
+        val fmt = java.text.SimpleDateFormat("d MMM", Locale.US)
+        for (r in rides.take(5)) {
+            val line = fmt.format(java.util.Date(r.start)) + " " + Clock.time(r.start) +
+                String.format(Locale.US, " · %.1f km · %s", r.km, durText(r.end - r.start)) +
+                (if (r.avgKmh > 0) String.format(Locale.US, " · ~%.0f km/j", r.avgKmh) else "") +
+                String.format(Locale.US, " · maks %.0f", r.maxKmh)
+            c.addView(act.label(line, 13f).apply {
+                setPadding(act.dp(10), act.dp(6), act.dp(10), act.dp(6))
+                background = GradientDrawable().apply {
+                    setColor(act.pal.bg)
+                    cornerRadius = act.dp(10).toFloat()
+                }
+            }, act.lp(top = 4))
+            if (r.label.isNotBlank()) c.addView(act.label("   " + r.label, 11f, color = act.pal.sub))
+        }
+    }
+
+    private fun durText(ms: Long): String {
+        val m = ms / 60_000L
+        return if (m >= 60) String.format(Locale.US, "%dj %02dm", m / 60, m % 60) else "${m}m"
+    }
+
     private fun groupInfo(g: RiderGroup.Group, sharing: Set<String>): String {
         val parts = mutableListOf<String>()
         if (g.code in sharing) parts += "📍 " + t("Anda berkongsi", "You're sharing", "您正在共享", "நீங்கள் பகிர்கிறீர்கள்")
@@ -266,6 +351,30 @@ class RiderPage(private val act: MainActivity) {
         col.addView(statusText)
         styleShare(g)
 
+        // Mesej pantas: satu tekan semasa ride (ahli dapat notifikasi + suara)
+        col.addView(android.widget.HorizontalScrollView(act).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(LinearLayout(act).apply {
+                for (q in RiderGroup.Quick.entries) {
+                    addView(act.pill(q.icon + " " + q.text) { sendQuick(g, q) }.apply {
+                        textSize = 14f
+                        setPadding(act.dp(14), 0, act.dp(14), 0)
+                    }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, act.dp(46)).apply { setMargins(0, 0, act.dp(6), 0) })
+                }
+            })
+        }, act.lp(top = 10))
+        msgFeed = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(msgFeed, act.lp(top = 4))
+        renderMsgs()
+
+        // Titik berkumpul
+        col.addView(LinearLayout(act).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            meetInfo = act.label("", 14f).also { addView(it, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)) }
+            addView(act.pill("🚩 " + t("Titik berkumpul", "Meeting point", "集合点", "சந்திப்பு இடம்")) { askMeet(g) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }, act.lp(top = 8))
+
         // Butiran rider
         val rc = act.card()
         col.addView(rc, act.lp(top = 10))
@@ -312,6 +421,103 @@ class RiderPage(private val act: MainActivity) {
         }
     }
 
+    // ------------------------------------------------------------ mesej pantas & titik berkumpul
+
+    /** Mesej 30 minit terakhir + maklumat titik berkumpul. */
+    private fun renderMsgs() {
+        val f = msgFeed ?: return
+        f.removeAllViews()
+        val now = System.currentTimeMillis()
+        for (m in msgs.filter { now - it.time < 30 * 60_000L }.take(4)) {
+            val who = if (m.me) t("Anda", "You", "您", "நீங்கள்") else m.name
+            f.addView(act.label("${m.quick.icon} $who: ${m.quick.text} · " + agoText(now - m.time), 14f).apply {
+                setPadding(act.dp(10), act.dp(6), act.dp(10), act.dp(6))
+                background = GradientDrawable().apply {
+                    setColor(act.pal.rainTint)
+                    cornerRadius = act.dp(10).toFloat()
+                }
+            }, act.lp(top = 4))
+        }
+        meetInfo?.text = meet?.let { mp ->
+            "🚩 " + mp.label.ifBlank { t("Titik berkumpul", "Meeting point", "集合点", "சந்திப்பு இடம்") } +
+                (if (mp.by.isNotBlank()) " · " + mp.by else "")
+        } ?: t("Belum ada titik berkumpul", "No meeting point yet", "尚未设置集合点", "சந்திப்பு இடம் இல்லை")
+    }
+
+    private fun sendQuick(g: RiderGroup.Group, q: RiderGroup.Quick) {
+        if (needName()) return
+        network({ RiderGroup.sendQuick(act.applicationContext, g, q) }) {
+            toast(q.icon + " " + t("Dihantar", "Sent", "已发送", "அனுப்பப்பட்டது"))
+            refresh()
+        }
+    }
+
+    /** Letak / buang titik berkumpul: lokasi saya sekarang, atau cari tempat. */
+    private fun askMeet(g: RiderGroup.Group) {
+        val opts = mutableListOf(
+            "📍 " + t("Lokasi saya sekarang", "My current location", "我的当前位置", "என் தற்போதைய இடம்"),
+            "🔎 " + t("Cari tempat…", "Search a place…", "搜索地点…", "இடம் தேடு…"),
+        )
+        if (meet != null) {
+            opts += "🧭 " + t("Navigasi ke titik berkumpul", "Navigate to meeting point", "导航至集合点", "சந்திப்பு இடத்திற்கு வழிகாட்டு")
+            opts += "🗑️ " + t("Buang titik berkumpul", "Remove meeting point", "删除集合点", "சந்திப்பு இடத்தை நீக்கு")
+        }
+        AlertDialog.Builder(act)
+            .setTitle("🚩 " + t("Titik berkumpul", "Meeting point", "集合点", "சந்திப்பு இடம்"))
+            .setItems(opts.toTypedArray()) { _, i ->
+                when (i) {
+                    0 -> {
+                        val me = riders.firstOrNull { it.me }?.let { it.lat to it.lon } ?: Prefs.lastLocation(act)
+                        if (me == null) {
+                            toast(t("Lokasi belum diketahui", "Location not known yet", "尚未获取位置", "இருப்பிடம் தெரியவில்லை"))
+                        } else {
+                            val label = t("Lokasi ", "Location of ", "", "") + RiderGroup.riderName(act) + t("", "", "的位置", " இருப்பிடம்")
+                            network({ RiderGroup.setMeet(act.applicationContext, g, me.first, me.second, label) }) { refresh() }
+                        }
+                    }
+                    1 -> searchMeet(g)
+                    2 -> meet?.let { mp ->
+                        val gm = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=${mp.lat},${mp.lon}&mode=l")).setPackage("com.google.android.apps.maps")
+                        runCatching { act.startActivity(gm) }.onFailure {
+                            act.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("geo:${mp.lat},${mp.lon}?q=${mp.lat},${mp.lon}")))
+                        }
+                    }
+                    3 -> network({ RiderGroup.clearMeet(act.applicationContext, g) }) {
+                        meet = null
+                        renderMsgs()
+                        render()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun searchMeet(g: RiderGroup.Group) {
+        val e = input(t("Nama tempat, cth. Petronas Bangi", "Place name, e.g. Petronas Bangi", "地点名称，例如 Petronas Bangi", "இடப் பெயர், எ.கா. Petronas Bangi"))
+        AlertDialog.Builder(act)
+            .setTitle("🔎 " + t("Cari tempat berkumpul", "Find a meeting place", "查找集合地点", "சந்திப்பு இடம் தேடு"))
+            .setView(e)
+            .setPositiveButton(t("Cari", "Search", "搜索", "தேடு")) { _, _ ->
+                val q = e.text.toString().trim()
+                if (q.isEmpty()) return@setPositiveButton
+                val (lat, lon) = Prefs.lastLocation(act) ?: (3.14 to 101.69)
+                network({ Route.search(q, lat, lon) }) { places ->
+                    if (places.isEmpty()) {
+                        toast(t("Tempat tak dijumpai", "Place not found", "找不到地点", "இடம் கிடைக்கவில்லை"))
+                    } else {
+                        AlertDialog.Builder(act)
+                            .setItems(places.map { "📍 " + it.name + if (it.detail.isNotBlank()) " — " + it.detail else "" }.toTypedArray()) { _, i ->
+                                val p = places[i]
+                                network({ RiderGroup.setMeet(act.applicationContext, g, p.lat, p.lon, p.name) }) { refresh() }
+                            }
+                            .show()
+                    }
+                }
+            }
+            .setNegativeButton(t("Batal", "Cancel", "取消", "ரத்து"), null)
+            .show()
+    }
+
     // ------------------------------------------------------------ data
 
     private fun refresh() {
@@ -321,13 +527,24 @@ class RiderPage(private val act: MainActivity) {
             val g = RiderGroup.find(act, code) ?: return
             Thread {
                 val r = runCatching { RiderGroup.fetch(app, g) }
+                val q = runCatching { RiderGroup.fetchQuick(app, g) }.getOrNull()
+                val p = runCatching { RiderGroup.fetchMeet(app, g) }
                 main.post {
                     if (!visible || act.isDestroyed || selected != code) return@post
+                    q?.let { msgs = it }
+                    p.onSuccess { meet = it }
                     r.onSuccess {
                         // sembunyi yang tak aktif lebih 2 jam
                         riders = it.filter { x -> System.currentTimeMillis() - x.time < 2 * 60 * 60_000L }
+                        // jejak laluan (hanya semasa halaman dibuka) — titik baru bila bergerak > 20 m
+                        for (x in riders) {
+                            val tr = trails.getOrPut(x.uid) { mutableListOf() }
+                            if (tr.isEmpty() || distKm(tr.last().first, tr.last().second, x.lat, x.lon) > 0.02) tr += x.lat to x.lon
+                            while (tr.size > 400) tr.removeAt(0)
+                        }
                         render()
                     }.onFailure { statusText?.text = t("Gagal (internet?): ", "Failed (internet?): ", "失败（网络？）：", "தோல்வி (இணையம்?): ") + it.message }
+                    renderMsgs()
                     styleShare(g)
                 }
             }.start()
@@ -361,6 +578,8 @@ class RiderPage(private val act: MainActivity) {
         // Zum automatik supaya semua rider muat (sedekat 0.5 km bila rider berdekatan)
         val far = others.maxOfOrNull { distKm(myLat, myLon, it.lat, it.lon) } ?: 0.0
         m.radarFrame = Radar.current()
+        m.meet = meet?.let { it.lat to it.lon }
+        m.trails = trails.mapValues { it.value.toList() }
         m.riders = others
         m.fitRiders(myLat, myLon, maxOf(0.5, far * 1.3))
 
@@ -421,6 +640,16 @@ class RiderPage(private val act: MainActivity) {
                 (if (!r.bearing.isNaN()) " " + Weather.toward(r.bearing) else "")
             stale -> t("Tidak aktif", "Inactive", "不活跃", "செயலில் இல்லை")
             else -> t("Berhenti", "Stopped", "已停下", "நிறுத்தியுள்ளார்")
+        }
+        // ETA ke titik berkumpul: laju semasa kalau sedang ride, kalau tak anggap ~40 km/j
+        meet?.let { mp ->
+            val d = distKm(r.lat, r.lon, mp.lat, mp.lon)
+            if (d < 0.15) {
+                parts += "🚩 " + t("Di titik berkumpul", "At the meeting point", "已在集合点", "சந்திப்பு இடத்தில்")
+            } else if (!stale) {
+                val min = (d / (if (riding) r.speedKmh else 40.0) * 60).toInt().coerceAtLeast(1)
+                parts += "🚩 " + t("~$min min", "~$min min", "约${min}分钟", "~$min நிமி.")
+            }
         }
         parts += agoText(ago)
         texts.addView(act.label(parts.joinToString(" · "), 13f, color = act.pal.sub).apply { setPadding(0, act.dp(2), 0, 0) })

@@ -226,6 +226,54 @@ class RainMapView(ctx: Context) : View(ctx) {
         invalidate()
     }
 
+    // ------------------------------------------------------------ laluan & tempat berteduh
+
+    /** Laluan dirancang (lat, lon) — dilukis berwarna ikut hujan dijangka. */
+    var route: List<Pair<Double, Double>> = emptyList()
+        set(v) { field = v; colorRoute(); invalidate() }
+    /** Titik semakan laluan (hujan pada masa sampai) untuk mewarnakan laluan. */
+    var routeSamples: List<Route.Sample> = emptyList()
+        set(v) { field = v; colorRoute(); invalidate() }
+    /** Tempat berteduh untuk dipapar sebagai ikon. */
+    /** Titik berkumpul kumpulan (🚩). */
+    var meet: Pair<Double, Double>? = null
+        set(v) { field = v; invalidate() }
+    /** Jejak laluan setiap rider (uid → titik), dilukis dengan warna rider. */
+    var trails: Map<String, List<Pair<Double, Double>>> = emptyMap()
+        set(v) { field = v; invalidate() }
+    var pois: List<Shelter.Spot> = emptyList()
+        set(v) { field = v; invalidate() }
+    private var routeColors = IntArray(0)
+
+    private fun colorRoute() {
+        if (route.size < 2 || routeSamples.isEmpty()) {
+            routeColors = IntArray(route.size) { Color.parseColor("#43A047") }
+            return
+        }
+        var cum = 0.0
+        routeColors = IntArray(route.size) { i ->
+            if (i > 0) cum += Route.km(route[i - 1], route[i])
+            val s = routeSamples.minByOrNull { kotlin.math.abs(it.km - cum) }!!
+            s.level.color
+        }
+    }
+
+    /** Zum & pusat supaya semua titik muat dalam peta (pengguna boleh ketik dua kali untuk kembali). */
+    fun fitTo(points: List<Pair<Double, Double>>) {
+        if (points.isEmpty()) return
+        val n = points.maxOf { it.first }
+        val s = points.minOf { it.first }
+        val e = points.maxOf { it.second }
+        val w = points.minOf { it.second }
+        centerLat = (n + s) / 2
+        centerLon = (e + w) / 2
+        val halfH = (n - s) / 2 * 111.32
+        val halfW = (e - w) / 2 * 111.32 * cos(Math.toRadians(centerLat))
+        viewKm = (maxOf(halfH, halfW) * 1.2).coerceIn(0.5, 400.0)
+        userView = true
+        invalidate()
+    }
+
     /** Skrin penuh: seret satu jari untuk gerak peta. */
     var oneFingerPan = false
     /** Skrin penuh: peta penuhi tinggi yang ada. */
@@ -246,6 +294,11 @@ class RainMapView(ctx: Context) : View(ctx) {
         aroundRider = o.aroundRider
         showRangeCircle = o.showRangeCircle
         radarFrame = o.radarFrame
+        route = o.route
+        routeSamples = o.routeSamples
+        pois = o.pois
+        meet = o.meet
+        trails = o.trails
         riders = o.riders
         userView = o.userView
         invalidate()
@@ -416,6 +469,67 @@ class RainMapView(ctx: Context) : View(ctx) {
             label(c, "🇲🇾 " + t("Semenanjung Malaysia", "Peninsular Malaysia", "马来西亚半岛", "தீபகற்ப மலேசியா"), w / 2, dp(22f))
         }
 
+        // Laluan: garis gelap di bawah, kemudian warna ikut hujan dijangka pada masa sampai
+        if (route.size >= 2) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeWidth = dp(8f)
+            paint.color = alpha(if (pal.dark) Color.BLACK else Color.parseColor("#263238"), 170)
+            for (i in 1 until route.size) c.drawLine(sx(route[i - 1].second), sy(route[i - 1].first), sx(route[i].second), sy(route[i].first), paint)
+            paint.strokeWidth = dp(5f)
+            for (i in 1 until route.size) {
+                paint.color = routeColors.getOrElse(i) { Color.parseColor("#43A047") }
+                c.drawLine(sx(route[i - 1].second), sy(route[i - 1].first), sx(route[i].second), sy(route[i].first), paint)
+            }
+            paint.strokeCap = Paint.Cap.BUTT
+            paint.style = Paint.Style.FILL
+            val end = route.last()
+            text.textAlign = Paint.Align.CENTER
+            text.textSize = dp(22f)
+            c.drawText("🏁", sx(end.second), sy(end.first) - dp(4f), text)
+        }
+
+        // Tempat berteduh
+        for (p in pois) {
+            val x = sx(p.lon)
+            val y = sy(p.lat)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.WHITE
+            c.drawCircle(x, y, dp(14f), paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = dp(2f)
+            paint.color = Color.parseColor("#1E88E5")
+            c.drawCircle(x, y, dp(14f), paint)
+            paint.style = Paint.Style.FILL
+            text.textAlign = Paint.Align.CENTER
+            text.textSize = dp(15f)
+            c.drawText(p.kind.icon, x, y + dp(5f), text)
+        }
+
+        // Jejak laluan setiap rider (garis nipis warna rider)
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = dp(3f)
+        for ((uid, pts) in trails) {
+            if (pts.size < 2) continue
+            paint.color = alpha(riderColor(uid), 170)
+            for (i in 1 until pts.size) c.drawLine(sx(pts[i - 1].second), sy(pts[i - 1].first), sx(pts[i].second), sy(pts[i].first), paint)
+        }
+        paint.strokeCap = Paint.Cap.BUTT
+        paint.style = Paint.Style.FILL
+
+        // Titik berkumpul
+        meet?.let { (la, lo) ->
+            val x = sx(lo)
+            val y = sy(la)
+            val ph = (SystemClock.uptimeMillis() % 1400L) / 1400f
+            paint.color = alpha(Color.parseColor("#E53935"), ((1 - ph) * 120).toInt())
+            c.drawCircle(x, y, dp(10f + 16f * ph), paint)
+            text.textAlign = Paint.Align.CENTER
+            text.textSize = dp(26f)
+            c.drawText("🚩", x + dp(6f), y, text)
+        }
+
         // Rider lain dalam kumpulan
         val nowUp = SystemClock.uptimeMillis()
         for ((i, r) in riders.withIndex()) {
@@ -423,7 +537,7 @@ class RainMapView(ctx: Context) : View(ctx) {
             val x = sx(lon)
             val y = sy(lat)
             val stale = System.currentTimeMillis() - r.time > 5 * 60_000L
-            val color = if (stale) Color.GRAY else RIDER_COLORS[i % RIDER_COLORS.size]
+            val color = if (stale) Color.GRAY else riderColor(r.uid)
             if (!stale && r.speedKmh >= RiderPage.MOVING_KMH) {
                 drawRiding(c, x, y, r, color, nowUp)
                 label(c, r.name + " · " + String.format(Locale.US, "%.0f km/j", r.speedKmh), x, y - dp(26f))
@@ -544,6 +658,9 @@ class RainMapView(ctx: Context) : View(ctx) {
 }
 
 private const val ANIM_MS = 4500f
+
+/** Warna tetap bagi setiap rider (penanda & jejak sama warna). */
+fun riderColor(uid: String) = RIDER_COLORS[Math.floorMod(uid.hashCode(), RIDER_COLORS.size)]
 
 private val RIDER_COLORS = intArrayOf(
     Color.parseColor("#1E88E5"), Color.parseColor("#8E24AA"), Color.parseColor("#43A047"),
