@@ -29,6 +29,32 @@ class LocationShareService : Service(), LocationListener {
     private var last: Location? = null
     private var lastSent = 0L
 
+    /** Setiap 30 saat: tamatkan kongsi bagi kumpulan yang dah habis tempoh. */
+    private val expiryTick = object : Runnable {
+        override fun run() {
+            val now = System.currentTimeMillis()
+            var changed = false
+            for (g in RiderGroup.groups(this@LocationShareService)) {
+                val until = RiderGroup.shareUntil(this@LocationShareService, g.code)
+                if (until in 1..now && g.code in RiderGroup.sharingRaw(this@LocationShareService)) {
+                    RiderGroup.setSharing(this@LocationShareService, g.code, false)
+                    runCatching { RiderGroup.removeMe(this@LocationShareService, g) }
+                    changed = true
+                }
+            }
+            if (changed) {
+                val left = sharedGroups(this@LocationShareService)
+                if (left.isEmpty()) {
+                    running = false
+                    stopSelf()
+                    return
+                }
+                getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification(left))
+            }
+            worker.postDelayed(this, 30_000L)
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -48,11 +74,13 @@ class LocationShareService : Service(), LocationListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        val n = notification(groups.joinToString(", ") { it.name })
+        val n = notification(groups)
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         else startForeground(NOTIF_ID, n)
         running = true
         lastSent = 0L // kumpulan baru ditambah — hantar segera pada lokasi seterusnya
+        worker.removeCallbacks(expiryTick)
+        worker.postDelayed(expiryTick, 30_000L)
         try {
             val lm = getSystemService(LocationManager::class.java)
             lm.removeUpdates(this)
@@ -95,7 +123,16 @@ class LocationShareService : Service(), LocationListener {
         super.onDestroy()
     }
 
-    private fun notification(groups: String): Notification {
+    private fun notification(list: List<RiderGroup.Group>): Notification {
+        val groups = list.joinToString(", ") { it.icon + " " + it.name }
+        // tempoh tamat paling awal (0 = sehingga ditekan Henti)
+        val end = list.map { RiderGroup.shareUntil(this, it.code) }.filter { it > 0 }.minOrNull()
+        val text = if (end != null) {
+            val at = Clock.time(end)
+            t("Sehingga $at. Ahli kumpulan nampak lokasi anda.", "Until $at. Group members can see where you are.", "直到${at}。群组成员可以看到您的位置。", "$at வரை. குழு உறுப்பினர்கள் உங்கள் இருப்பிடத்தைப் பார்க்கலாம்.")
+        } else {
+            t("Ahli kumpulan nampak lokasi anda.", "Group members can see where you are.", "群组成员可以看到您的位置。", "குழு உறுப்பினர்கள் உங்கள் இருப்பிடத்தைப் பார்க்கலாம்.")
+        }
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CH, t("Kongsi lokasi rider", "Rider location sharing", "骑手位置共享", "ரைடர் இருப்பிடப் பகிர்வு"), NotificationManager.IMPORTANCE_LOW)
@@ -112,7 +149,7 @@ class LocationShareService : Service(), LocationListener {
         return Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle("📍 " + t("Berkongsi lokasi", "Sharing location", "正在共享位置", "இருப்பிடம் பகிரப்படுகிறது") + " · $groups")
-            .setContentText(t("Ahli kumpulan nampak lokasi anda.", "Group members can see where you are.", "群组成员可以看到您的位置。", "குழு உறுப்பினர்கள் உங்கள் இருப்பிடத்தைப் பார்க்கலாம்."))
+            .setContentText(text)
             .setOngoing(true)
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, t("Henti semua", "Stop all", "全部停止", "அனைத்தையும் நிறுத்து"), stop).build())
@@ -133,9 +170,12 @@ class LocationShareService : Service(), LocationListener {
             return RiderGroup.groups(c).filter { it.code in codes }
         }
 
-        /** Mula / sambung kongsi dengan satu kumpulan (kumpulan lain yang dikongsi kekal). */
-        fun startGroup(c: Context, g: RiderGroup.Group) {
-            RiderGroup.setSharing(c, g.code, true)
+        /**
+         * Mula / sambung kongsi dengan satu kumpulan (kumpulan lain yang dikongsi kekal).
+         * until = masa tamat (ms), 0 = sehingga ditekan Henti; null = kekalkan tempoh sedia ada.
+         */
+        fun startGroup(c: Context, g: RiderGroup.Group, until: Long? = null) {
+            RiderGroup.setSharing(c, g.code, true, until ?: RiderGroup.shareUntil(c, g.code))
             c.startForegroundService(Intent(c, LocationShareService::class.java))
         }
 

@@ -96,6 +96,12 @@ class RiderPage(private val act: MainActivity) {
         riders = emptyList()
         act.setRiderBackHandler(code != null)
         build()
+        // Nama / ikon mungkin ditukar oleh ahli lain — semak pelayan
+        RiderGroup.find(act, code ?: "")?.let { g ->
+            network({ RiderGroup.refreshMeta(act.applicationContext, g) }) { fresh ->
+                if (selected == code && (fresh.name != g.name || fresh.icon != g.icon)) build()
+            }
+        }
         main.removeCallbacks(poll)
         if (visible) main.post(poll)
     }
@@ -187,7 +193,7 @@ class RiderPage(private val act: MainActivity) {
                 isClickable = true
                 setOnClickListener { open(g.code) }
             }
-            row.addView(act.label(if (g.code in sharing) "📍" else "👥", 24f).apply { setPadding(0, 0, act.dp(12), 0) })
+            row.addView(act.label(g.icon, 26f).apply { setPadding(0, 0, act.dp(12), 0) })
             val texts = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
             texts.addView(act.label(g.name, 17f, bold = true).apply { setPadding(0, 0, 0, 0) })
             val info = act.label(groupInfo(g, sharing), 13f, color = act.pal.sub).apply { setPadding(0, act.dp(2), 0, 0) }
@@ -198,12 +204,17 @@ class RiderPage(private val act: MainActivity) {
             c.addView(row, act.lp(top = 8))
         }
         c.addView(act.pill("➕ " + t("Cipta kumpulan", "Create group", "创建群组", "குழுவை உருவாக்கு"), primary = true) { askCreate() }, act.lp(top = 14))
-        c.addView(act.pill("🔗 " + t("Sertai dengan kod", "Join with code", "用代码加入", "குறியீட்டுடன் சேர்")) { askJoin() }, act.lp(top = 8))
+        c.addView(LinearLayout(act).apply {
+            addView(act.pill("📷 " + t("Imbas QR", "Scan QR", "扫描二维码", "QR ஸ்கேன்")) { scanQr() },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, 0, act.dp(4), 0) })
+            addView(act.pill("🔗 " + t("Masukkan kod", "Enter code", "输入代码", "குறியீடு")) { askJoin() },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(act.dp(4), 0, 0, 0) })
+        }, act.lp(top = 8))
     }
 
     private fun groupInfo(g: RiderGroup.Group, sharing: Set<String>): String {
         val parts = mutableListOf<String>()
-        if (g.code in sharing) parts += t("Anda berkongsi", "You're sharing", "您正在共享", "நீங்கள் பகிர்கிறீர்கள்")
+        if (g.code in sharing) parts += "📍 " + t("Anda berkongsi", "You're sharing", "您正在共享", "நீங்கள் பகிர்கிறீர்கள்")
         val n = active[g.code]
         parts += when {
             n == null -> "…"
@@ -213,52 +224,72 @@ class RiderPage(private val act: MainActivity) {
         return parts.joinToString(" · ")
     }
 
-    /** Halaman satu kumpulan: kod jemputan, kongsi lokasi, peta live, butiran rider. */
+    /** Halaman satu kumpulan: peta besar di atas, kongsi lokasi, butiran rider, jemputan (kod / QR). */
     private fun buildDetail(g: RiderGroup.Group) {
-        col.addView(act.label("‹ " + t("Semua kumpulan", "All groups", "所有群组", "அனைத்து குழுக்கள்"), 16f, bold = true, color = act.pal.orange).apply {
-            setPadding(0, act.dp(12), 0, act.dp(4))
-            setOnClickListener { open(null) }
+        // Tajuk: ‹ kembali · ikon · nama · ✏️ ubah
+        col.addView(LinearLayout(act).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, act.dp(10), 0, act.dp(2))
+            addView(act.label("‹", 30f, bold = true, color = act.pal.orange).apply {
+                setPadding(0, 0, act.dp(12), 0)
+                setOnClickListener { open(null) }
+            })
+            addView(act.label(g.icon, 28f).apply { setPadding(0, 0, act.dp(8), 0) })
+            addView(act.label(g.name, 20f, bold = true).apply { setPadding(0, 0, 0, 0) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(act.label("✏️", 22f).apply {
+                setPadding(act.dp(10), act.dp(4), act.dp(4), act.dp(4))
+                contentDescription = t("Ubah kumpulan", "Edit group", "编辑群组", "குழுவைத் திருத்து")
+                setOnClickListener { askEdit(g) }
+            })
         })
-        val c = act.card()
-        col.addView(c, act.lp(top = 4))
-        c.addView(act.label("👥 " + g.name, 20f, bold = true))
-        c.addView(act.label(t("Kod jemputan:", "Invite code:", "邀请码：", "அழைப்புக் குறியீடு:"), 13f, color = act.pal.sub), act.lp(top = 4))
-        c.addView(act.label(g.code, 18f, bold = true, color = act.pal.orange).apply {
-            typeface = Typeface.MONOSPACE
-            setTextIsSelectable(true)
-        })
-        c.addView(LinearLayout(act).apply {
-            addView(act.pill("📤 " + t("Jemput", "Invite", "邀请", "அழை")) { share(g) },
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, 0, act.dp(4), 0) })
-            addView(act.pill("📋 " + t("Salin kod", "Copy code", "复制代码", "நகலெடு")) { copy(g) },
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(act.dp(4), 0, 0, 0) })
-        }, act.lp(top = 6))
 
-        shareBtn = act.pill("", primary = true) { toggleShare(g) }
-        c.addView(shareBtn, act.lp(top = 12))
-        statusText = act.label("", 13f, color = act.pal.sub).apply { gravity = Gravity.CENTER }
-        c.addView(statusText)
-        styleShare(g)
-
-        // Peta rider + radar hujan
-        val mc = act.card()
-        col.addView(mc, act.lp(top = 12))
+        // Peta besar di atas (lebih tinggi dari lebar) — rider + radar hujan
         map = RainMapView(act).also {
             it.interactive = true
             it.showRangeCircle = false
+            it.aspect = 1.25f
             it.onResetView = { render() }
-            mc.addView(it)
+            col.addView(it, act.lp(top = 6))
         }
-        mc.addView(act.label("🤏 " + t(
+        col.addView(act.label("🤏 " + t(
             "Dua jari: cubit untuk zum / seret untuk gerak · ketik dua kali: muat semua rider",
             "Two fingers: pinch to zoom / drag to move · double-tap: fit all riders",
             "双指：缩放 / 拖动 · 双击：显示所有骑手",
             "இரு விரல்: பெரிதாக்க / நகர்த்த · இருமுறை தட்டு: அனைவரையும் காட்டு",
         ), 12f, color = act.pal.sub).apply { gravity = Gravity.CENTER })
-        mc.addView(act.label("🏍️ " + t("Rider dalam kumpulan", "Riders in this group", "群组中的骑手", "குழுவில் உள்ள ரைடர்கள்"), 16f, bold = true), act.lp(top = 10))
+
+        // Kongsi lokasi
+        shareBtn = act.pill("", primary = true) { toggleShare(g) }
+        col.addView(shareBtn, act.lp(top = 8))
+        statusText = act.label("", 13f, color = act.pal.sub).apply { gravity = Gravity.CENTER }
+        col.addView(statusText)
+        styleShare(g)
+
+        // Butiran rider
+        val rc = act.card()
+        col.addView(rc, act.lp(top = 10))
+        rc.addView(act.label("🏍️ " + t("Rider dalam kumpulan", "Riders in this group", "群组中的骑手", "குழுவில் உள்ள ரைடர்கள்"), 16f, bold = true))
         list = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
-        mc.addView(list, act.lp(top = 4))
+        rc.addView(list, act.lp(top = 4))
         render()
+
+        // Jemput rider: kod, kongsi, salin, QR
+        val c = act.card()
+        col.addView(c, act.lp(top = 12))
+        c.addView(act.label("➕ " + t("Jemput rider", "Invite riders", "邀请骑手", "ரைடர்களை அழை"), 16f, bold = true))
+        c.addView(act.label(g.code, 17f, bold = true, color = act.pal.orange).apply {
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+        })
+        c.addView(LinearLayout(act).apply {
+            addView(act.pill("📤 " + t("Kongsi", "Share", "分享", "பகிர்")) { share(g) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, 0, act.dp(3), 0) })
+            addView(act.pill("📋 " + t("Salin", "Copy", "复制", "நகல்")) { copy(g) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(act.dp(3), 0, act.dp(3), 0) })
+            addView(act.pill("🔳 QR") { showQr(g) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(act.dp(3), 0, 0, 0) })
+        }, act.lp(top = 6))
 
         col.addView(act.pill("🚪 " + t("Keluar kumpulan", "Leave group", "退出群组", "குழுவை விட்டு வெளியேறு")) { askLeave(g) }, act.lp(top = 16))
     }
@@ -270,8 +301,15 @@ class RiderPage(private val act: MainActivity) {
         shareBtn?.text = if (on) "⏹ " + t("Henti kongsi lokasi", "Stop sharing location", "停止共享位置", "இருப்பிடப் பகிர்வை நிறுத்து")
         else "▶ " + t("Mula kongsi lokasi saya", "Start sharing my location", "开始共享我的位置", "என் இருப்பிடத்தைப் பகிரத் தொடங்கு")
         shareBtn?.let { act.stylePill(it, primary = !on) }
-        statusText?.text = if (on) "📍 " + t("Ahli kumpulan ini nampak lokasi anda (dikemas kini ~10 saat).", "Members of this group can see you (updated ~every 10 s).", "此群组成员可以看到您（约每10秒更新）。", "இந்தக் குழு உறுப்பினர்கள் உங்களைப் பார்க்கலாம் (~10 வினாடிக்கு ஒருமுறை).")
-        else t("Anda boleh lihat rider lain walaupun tak kongsi.", "You can see other riders even without sharing.", "即使不共享，您也能看到其他骑手。", "பகிராமலும் மற்ற ரைடர்களைப் பார்க்கலாம்.")
+        val until = RiderGroup.shareUntil(act, g.code)
+        statusText?.text = when {
+            on && until > 0 -> {
+                val at = Clock.time(until)
+                "📍 " + t("Berkongsi sehingga $at", "Sharing until $at", "共享至${at}", "$at வரை பகிர்கிறது")
+            }
+            on -> "📍 " + t("Berkongsi sehingga anda tekan Henti", "Sharing until you tap Stop", "共享直到您点击停止", "நிறுத்து அழுத்தும் வரை பகிர்கிறது")
+            else -> t("Anda boleh lihat rider lain walaupun tak kongsi.", "You can see other riders even without sharing.", "即使不共享，您也能看到其他骑手。", "பகிராமலும் மற்ற ரைடர்களைப் பார்க்கலாம்.")
+        }
     }
 
     // ------------------------------------------------------------ data
@@ -431,21 +469,150 @@ class RiderPage(private val act: MainActivity) {
         setPadding(act.dp(20), act.dp(16), act.dp(20), act.dp(16))
     }
 
+    /** Borang nama + pilihan ikon (cipta / ubah kumpulan). Pulang (view, ambil nama, ambil ikon). */
+    private fun groupForm(name: String, icon: String): Triple<View, () -> String, () -> String> {
+        var picked = icon
+        val box = LinearLayout(act).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(act.dp(20), act.dp(8), act.dp(20), 0)
+        }
+        val e = input(t("Nama kumpulan, cth. Geng Ride KL", "Group name, e.g. KL Riders", "群组名称，例如 KL 骑手", "குழு பெயர், எ.கா. KL Riders"), name).apply {
+            setPadding(act.dp(4), act.dp(12), act.dp(4), act.dp(12))
+        }
+        box.addView(e)
+        box.addView(act.label(t("Ikon kumpulan", "Group icon", "群组图标", "குழு சின்னம்"), 14f, bold = true, color = act.pal.sub), act.lp(top = 10))
+        val cells = mutableListOf<TextView>()
+        fun mark() = cells.forEach { c ->
+            c.background = if (c.text == picked) GradientDrawable().apply {
+                setColor(act.pal.rainTint)
+                setStroke(act.dp(2), act.pal.orange)
+                cornerRadius = act.dp(10).toFloat()
+            } else null
+        }
+        for (rowIcons in RiderGroup.ICONS.chunked(6)) {
+            val row = LinearLayout(act)
+            for (ic in rowIcons) {
+                val cell = act.label(ic, 26f).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, act.dp(6), 0, act.dp(6))
+                    setOnClickListener { picked = ic; mark() }
+                }
+                cells += cell
+                row.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
+            box.addView(row)
+        }
+        mark()
+        return Triple(box, { e.text.toString() }, { picked })
+    }
+
     private fun askCreate() {
         if (needName()) return
-        val e = input(t("Nama kumpulan, cth. Geng Ride KL", "Group name, e.g. KL Riders", "群组名称，例如 KL 骑手", "குழு பெயர், எ.கா. KL Riders"))
+        val (view, name, icon) = groupForm("", RiderGroup.DEFAULT_ICON)
         AlertDialog.Builder(act)
             .setTitle("➕ " + t("Cipta kumpulan", "Create group", "创建群组", "குழுவை உருவாக்கு"))
-            .setView(e)
+            .setView(view)
             .setPositiveButton(t("Cipta", "Create", "创建", "உருவாக்கு")) { _, _ ->
-                val name = e.text.toString().ifBlank { t("Kumpulan saya", "My group", "我的群组", "என் குழு") }
-                network({ RiderGroup.create(act.applicationContext, name) }) { g ->
+                val n = name().ifBlank { t("Kumpulan saya", "My group", "我的群组", "என் குழு") }
+                val ic = icon()
+                network({ RiderGroup.create(act.applicationContext, n, ic) }) { g ->
                     open(g.code)
                     share(g)
                 }
             }
             .setNegativeButton(t("Batal", "Cancel", "取消", "ரத்து"), null)
             .show()
+    }
+
+    /** Tukar nama / ikon kumpulan — untuk semua ahli (perlu peraturan Firebase v2.6). */
+    private fun askEdit(g: RiderGroup.Group) {
+        val (view, name, icon) = groupForm(g.name, g.icon)
+        AlertDialog.Builder(act)
+            .setTitle("✏️ " + t("Ubah kumpulan", "Edit group", "编辑群组", "குழுவைத் திருத்து"))
+            .setView(view)
+            .setPositiveButton(t("Simpan", "Save", "保存", "சேமி")) { _, _ ->
+                val n = name()
+                val ic = icon()
+                network({ RiderGroup.edit(act.applicationContext, g, n, ic) }) { synced ->
+                    if (!synced) toast(t(
+                        "Disimpan dalam phone ini sahaja (pelayan menolak — kemas kini peraturan Firebase).",
+                        "Saved on this phone only (server refused — update the Firebase rules).",
+                        "仅保存在此手机（服务器拒绝——请更新 Firebase 规则）。",
+                        "இந்த தொலைபேசியில் மட்டும் சேமிக்கப்பட்டது (Firebase விதிகளைப் புதுப்பிக்கவும்).",
+                    ))
+                    build()
+                }
+            }
+            .setNegativeButton(t("Batal", "Cancel", "取消", "ரத்து"), null)
+            .show()
+    }
+
+    /** Tunjuk QR kod kumpulan — rider sebelah imbas dengan JagaRide (Rider → Imbas QR). */
+    private fun showQr(g: RiderGroup.Group) {
+        val size = act.dp(260)
+        val bmp = runCatching {
+            val m = com.google.zxing.qrcode.QRCodeWriter().encode(
+                "JagaRide ${g.code}", com.google.zxing.BarcodeFormat.QR_CODE, size, size,
+                mapOf(com.google.zxing.EncodeHintType.MARGIN to 1),
+            )
+            val px = IntArray(size * size) { i -> if (m[i % size, i / size]) android.graphics.Color.BLACK else android.graphics.Color.WHITE }
+            android.graphics.Bitmap.createBitmap(px, size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        }.getOrNull() ?: return
+        val box = LinearLayout(act).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(act.dp(16), act.dp(12), act.dp(16), 0)
+            addView(android.widget.ImageView(act).apply {
+                setImageBitmap(bmp)
+                setBackgroundColor(android.graphics.Color.WHITE)
+                setPadding(act.dp(8), act.dp(8), act.dp(8), act.dp(8))
+            }, LinearLayout.LayoutParams(size + act.dp(16), size + act.dp(16)))
+            addView(act.label(g.icon + " " + g.name, 18f, bold = true).apply { gravity = Gravity.CENTER })
+            addView(act.label(t(
+                "Rider sebelah: buka JagaRide → Rider → 📷 Imbas QR",
+                "Nearby rider: open JagaRide → Riders → 📷 Scan QR",
+                "身边的骑手：打开 JagaRide → 骑手 → 📷 扫描二维码",
+                "அருகிலுள்ள ரைடர்: JagaRide → ரைடர்கள் → 📷 QR ஸ்கேன்",
+            ), 14f, color = act.pal.sub).apply { gravity = Gravity.CENTER })
+        }
+        AlertDialog.Builder(act).setView(box).setPositiveButton(t("Tutup", "Close", "关闭", "மூடு"), null).show()
+    }
+
+    /** Imbas QR kumpulan dengan pengimbas Google (tiada kebenaran kamera diperlukan). */
+    private fun scanQr() {
+        if (needName()) return
+        val opts = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
+            .build()
+        com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(act, opts).startScan()
+            .addOnSuccessListener { barcode ->
+                val code = RiderGroup.parse(barcode.rawValue.orEmpty())
+                if (code == null) {
+                    toast(t("QR ini bukan kumpulan JagaRide", "This QR is not a JagaRide group", "这不是 JagaRide 群组二维码", "இது JagaRide குழு QR அல்ல"))
+                } else {
+                    joinCode(code)
+                }
+            }
+            .addOnFailureListener {
+                toast(t(
+                    "Pengimbas belum sedia (Google Play sedang muat turun) — cuba lagi sekejap, atau guna kod.",
+                    "Scanner not ready (Google Play is downloading it) — try again shortly, or use the code.",
+                    "扫描器尚未就绪（Google Play 正在下载）——请稍后再试，或使用代码。",
+                    "ஸ்கேனர் தயாராக இல்லை — சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும், அல்லது குறியீட்டைப் பயன்படுத்தவும்.",
+                ))
+            }
+    }
+
+    private fun joinCode(code: String) {
+        RiderGroup.find(act, code)?.let { return open(it.code) } // dah ahli
+        network({ RiderGroup.join(act.applicationContext, code) }) { g ->
+            if (g == null) {
+                toast(t("Kumpulan tak dijumpai", "Group not found", "找不到群组", "குழு கிடைக்கவில்லை"))
+                build()
+            } else {
+                open(g.code)
+            }
+        }
     }
 
     private fun askJoin() {
@@ -464,14 +631,7 @@ class RiderPage(private val act: MainActivity) {
                     toast(t("Kod tak sah", "Invalid code", "代码无效", "தவறான குறியீடு"))
                     return@setPositiveButton
                 }
-                network({ RiderGroup.join(act.applicationContext, code) }) { g ->
-                    if (g == null) {
-                        toast(t("Kumpulan tak dijumpai", "Group not found", "找不到群组", "குழு கிடைக்கவில்லை"))
-                        build()
-                    } else {
-                        open(g.code)
-                    }
-                }
+                joinCode(code)
             }
             .setNegativeButton(t("Batal", "Cancel", "取消", "ரத்து"), null)
             .show()
@@ -500,8 +660,24 @@ class RiderPage(private val act: MainActivity) {
             act.requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 21)
             return
         }
-        LocationShareService.startGroup(act, g)
-        main.postDelayed({ styleShare(g); refresh() }, 1500)
+        // Berapa lama nak kongsi?
+        val mins = listOf(30, 60, 240, 480, 0)
+        val labels = arrayOf(
+            "⏱️ " + t("30 minit", "30 minutes", "30分钟", "30 நிமிடம்"),
+            "⏱️ " + t("1 jam", "1 hour", "1小时", "1 மணி நேரம்"),
+            "⏱️ " + t("4 jam", "4 hours", "4小时", "4 மணி நேரம்"),
+            "⏱️ " + t("8 jam", "8 hours", "8小时", "8 மணி நேரம்"),
+            "♾️ " + t("Sehingga saya tekan Henti", "Until I tap Stop", "直到我点击停止", "நான் நிறுத்தும் வரை"),
+        )
+        AlertDialog.Builder(act)
+            .setTitle("📍 " + t("Kongsi lokasi berapa lama?", "Share location for how long?", "共享位置多久？", "எவ்வளவு நேரம் பகிர வேண்டும்?"))
+            .setItems(labels) { _, i ->
+                val until = if (mins[i] == 0) 0L else System.currentTimeMillis() + mins[i] * 60_000L
+                LocationShareService.startGroup(act, g, until)
+                main.postDelayed({ styleShare(g); refresh() }, 1500)
+            }
+            .setNegativeButton(t("Batal", "Cancel", "取消", "ரத்து"), null)
+            .show()
     }
 
     private fun share(g: RiderGroup.Group) {

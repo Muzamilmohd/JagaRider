@@ -20,7 +20,15 @@ import javax.crypto.spec.SecretKeySpec
  */
 object RiderGroup {
 
-    data class Group(val code: String, val gid: String, val key: ByteArray, val name: String)
+    data class Group(val code: String, val gid: String, val key: ByteArray, val name: String, val icon: String = DEFAULT_ICON)
+
+    const val DEFAULT_ICON = "🏍️"
+
+    /** Pilihan ikon kumpulan. */
+    val ICONS = listOf(
+        "🏍️", "🛵", "🏁", "🔥", "⚡", "🌧️", "🦅", "🐯", "🦁", "🐺", "🚀", "⭐",
+        "🛣️", "🏔️", "🌊", "🌴", "🎯", "💪", "❤️", "🇲🇾", "☕", "🍜", "🎓", "👥",
+    )
 
     data class Rider(
         val uid: String,
@@ -50,11 +58,12 @@ object RiderGroup {
 
     private fun sha(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
 
-    private fun derive(code: String, name: String) = Group(
+    private fun derive(code: String, name: String, icon: String = DEFAULT_ICON) = Group(
         code = code,
         gid = sha("gid:$code").joinToString("") { "%02x".format(it) }.take(32),
         key = sha("key:$code").copyOf(16),
         name = name,
+        icon = icon,
     )
 
     private fun encrypt(key: ByteArray, plain: String): String {
@@ -79,18 +88,22 @@ object RiderGroup {
     fun groups(c: Context): List<Group> {
         migrate(c)
         val arr = JSONArray(sp(c).getString("groups", "[]"))
-        return (0 until arr.length()).map { arr.getJSONObject(it) }.map { derive(it.getString("code"), it.optString("name")) }
+        return (0 until arr.length()).map { arr.getJSONObject(it) }
+            .map { derive(it.getString("code"), it.optString("name"), it.optString("icon", DEFAULT_ICON)) }
     }
 
     fun find(c: Context, code: String): Group? = groups(c).firstOrNull { it.code == code }
 
     private fun saveGroups(c: Context, list: List<Group>) {
         val arr = JSONArray()
-        for (g in list) arr.put(JSONObject().put("code", g.code).put("name", g.name))
+        for (g in list) arr.put(JSONObject().put("code", g.code).put("name", g.name).put("icon", g.icon))
         sp(c).edit().putString("groups", arr.toString()).apply()
     }
 
     private fun add(c: Context, g: Group) = saveGroups(c, groups(c).filter { it.code != g.code } + g)
+
+    /** Ganti maklumat kumpulan (nama / ikon) dalam senarai, kekalkan susunan. */
+    private fun replace(c: Context, g: Group) = saveGroups(c, groups(c).map { if (it.code == g.code) g else it })
 
     /** v2.2–v2.4 simpan satu kumpulan sahaja ("code"/"name") — pindah ke senarai. */
     private fun migrate(c: Context) {
@@ -106,36 +119,84 @@ object RiderGroup {
         sp(c).edit().putString("rider", name.trim().take(24)).apply()
     }
 
-    /** Kumpulan yang sedang menerima lokasi saya (kod). */
-    fun sharing(c: Context): Set<String> = sp(c).getStringSet("sharing", emptySet())!!.toSet()
+    // ------------------------------------------------------------ kongsi lokasi (dengan tempoh)
 
-    fun setSharing(c: Context, code: String, on: Boolean) {
-        val s = sharing(c).toMutableSet()
-        if (on) s += code else s -= code
-        sp(c).edit().putStringSet("sharing", s).apply()
+    /** Tamat kongsi bagi setiap kumpulan: kod → masa (ms), 0 = sehingga ditekan Henti. */
+    private fun untilMap(c: Context): JSONObject = JSONObject(sp(c).getString("share_until", "{}") ?: "{}")
+
+    /** Kumpulan yang sedang menerima lokasi saya (kod) — yang dah tamat tempoh tak dikira. */
+    fun sharing(c: Context): Set<String> {
+        val m = untilMap(c)
+        val now = System.currentTimeMillis()
+        val legacy = sp(c).getStringSet("sharing", emptySet())!! // v2.5: tanpa tempoh
+        return (m.keys().asSequence().filter { m.optLong(it) == 0L || m.optLong(it) > now } + legacy.asSequence()).toSet()
+    }
+
+    /** Semua kod dalam senarai kongsi, termasuk yang dah tamat tempoh (untuk dibersihkan). */
+    fun sharingRaw(c: Context): Set<String> = untilMap(c).keys().asSequence().toSet() + sp(c).getStringSet("sharing", emptySet())!!
+
+    /** Masa tamat kongsi (ms), 0 = sehingga ditekan Henti. */
+    fun shareUntil(c: Context, code: String): Long = untilMap(c).optLong(code, 0L)
+
+    fun setSharing(c: Context, code: String, on: Boolean, until: Long = 0L) {
+        val m = untilMap(c)
+        if (on) m.put(code, until) else m.remove(code)
+        val legacy = sp(c).getStringSet("sharing", emptySet())!!.toMutableSet().apply { remove(code) }
+        sp(c).edit().putString("share_until", m.toString()).putStringSet("sharing", legacy).apply()
     }
 
     fun clearSharing(c: Context) {
-        sp(c).edit().remove("sharing").apply()
+        sp(c).edit().remove("sharing").remove("share_until").apply()
     }
 
+    // ------------------------------------------------------------ cipta / sertai / ubah
+
+    private fun metaJson(g: Group) = JSONObject()
+        .put("n", encrypt(g.key, g.name))
+        .put("i", encrypt(g.key, g.icon))
+        .put("t", serverTime())
+        .toString()
+
     /** Cipta kumpulan baru (rangkaian). */
-    fun create(c: Context, name: String): Group {
-        val g = derive(newCode(), name.trim().take(30))
-        Firebase.put(c, "groups/${g.gid}/meta", JSONObject().put("n", encrypt(g.key, g.name)).put("t", serverTime()).toString())
+    fun create(c: Context, name: String, icon: String = DEFAULT_ICON): Group {
+        val g = derive(newCode(), name.trim().take(30), icon)
+        Firebase.put(c, "groups/${g.gid}/meta", metaJson(g))
         add(c, g)
         return g
     }
 
     /** Sertai dengan kod (rangkaian). Null kalau kumpulan tak wujud. */
     fun join(c: Context, code: String): Group? {
-        val probe = derive(code, "")
-        val meta = Firebase.get(c, "groups/${probe.gid}/meta")
-        if (meta == "null") return null
-        val name = runCatching { decrypt(probe.key, JSONObject(meta).getString("n")) }.getOrNull() ?: return null
-        val g = probe.copy(name = name)
+        val g = readMeta(c, derive(code, "", DEFAULT_ICON)) ?: return null
         add(c, g)
         return g
+    }
+
+    /** Baca nama & ikon terkini dari pelayan (null kalau kumpulan tak wujud / rosak). */
+    private fun readMeta(c: Context, probe: Group): Group? {
+        val meta = Firebase.get(c, "groups/${probe.gid}/meta")
+        if (meta == "null") return null
+        val o = JSONObject(meta)
+        val name = runCatching { decrypt(probe.key, o.getString("n")) }.getOrNull() ?: return null
+        val icon = runCatching { decrypt(probe.key, o.getString("i")) }.getOrNull() ?: DEFAULT_ICON
+        return probe.copy(name = name, icon = icon)
+    }
+
+    /** Kemas kini nama / ikon dari pelayan (ahli lain mungkin dah tukar). Pulang kumpulan terkini. */
+    fun refreshMeta(c: Context, g: Group): Group {
+        val fresh = runCatching { readMeta(c, g) }.getOrNull() ?: return g
+        if (fresh.name != g.name || fresh.icon != g.icon) replace(c, fresh)
+        return fresh
+    }
+
+    /**
+     * Tukar nama / ikon kumpulan untuk semua ahli. Disimpan dalam phone dulu; pulang false kalau pelayan
+     * menolak (peraturan Firebase lama — v2.2 hanya benarkan meta ditulis sekali).
+     */
+    fun edit(c: Context, g: Group, name: String, icon: String): Boolean {
+        val n = g.copy(name = name.trim().take(30).ifBlank { g.name }, icon = icon)
+        replace(c, n)
+        return runCatching { Firebase.put(c, "groups/${n.gid}/meta", metaJson(n)) }.isSuccess
     }
 
     /** Keluar kumpulan: buang lokasi saya dari pelayan dan dari senarai. */

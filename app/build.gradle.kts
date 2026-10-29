@@ -25,8 +25,8 @@ android {
         applicationId = "com.jagarider"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "2.5"
+        versionCode = 17
+        versionName = "2.6"
 
         // Repo GitHub (owner/nama) tempat semak update — tetapkan dalam gradle.properties
         val repo = (project.findProperty("jagarider.updateRepo") as String?).orEmpty()
@@ -69,5 +69,8 @@ kotlin {
 }
 
 dependencies {
-    // Tiada library luar — semua guna Android standard supaya ringan.
+    // Hampir semua guna Android standard supaya ringan. Pengecualian (v2.6) untuk QR kumpulan rider:
+    // pengimbas QR Google (UI kamera disediakan Play services, tiada kebenaran kamera) + ZXing untuk jana QR.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.google.zxing:core:3.5.3")
 }

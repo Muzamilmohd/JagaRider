@@ -4,8 +4,8 @@
       "$gid": {
         ".read": "auth != null && $gid.length === 32",
         "meta": {
-          ".write": "auth != null && !data.exists()",
-          ".validate": "newData.hasChildren(['n', 't']) && newData.child('n').isString() && newData.child('n').val().length < 400 && newData.child('t').isNumber()"
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['n', 't']) && newData.child('n').isString() && newData.child('n').val().length < 400 && newData.child('t').isNumber() && (!newData.hasChild('i') || (newData.child('i').isString() && newData.child('i').val().length < 200))"
         },
         "m": {
           "$uid": {

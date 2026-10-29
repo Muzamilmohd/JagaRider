@@ -109,3 +109,11 @@ Phone connected via `adb` (wireless). `adb install -r app/build/outputs/apk/rele
   Riding (≥ `RiderPage.MOVING_KMH` 5 km/h, fresh): map marker `drawRiding` (🏍️ bob, pulse, speed lines opposite the
   bearing), positions eased between polls (`moveAnim`, 4.5 s); list row icon wiggles (ObjectAnimator, cancelled on re-render).
   `LocationShareService.startGroup/stopGroup/stopAll` — one service publishes to every group in `sharing`.
+- v2.6: group detail = header (‹ · icon · name · ✏️) → big map on top (`RainMapView.aspect` 1.25) → share button →
+  rider rows → invite card (code / share / copy / 🔳 QR) → leave. Group `icon` (emoji, `RiderGroup.ICONS`) + rename
+  sync via `groups/{gid}/meta` {n: enc(name), i: enc(icon), t}; `refreshMeta` on open. Needs the v2.6 rules (meta
+  writable by any signed-in member) — with the old rules `RiderGroup.edit` saves locally and returns false.
+- Share duration: `RiderGroup.share_until` JSON {code: until ms, 0 = until Stop}; `LocationShareService.expiryTick`
+  (30 s) drops expired groups and stops when none left; notification shows the earliest end time.
+- QR (only external libraries in the app): ZXing core generates "JagaRide JR-…"; Google Play services Code Scanner
+  (`GmsBarcodeScanning`, no camera permission, module downloaded by Play on first use) scans → `RiderGroup.parse`.

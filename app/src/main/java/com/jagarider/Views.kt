@@ -217,9 +217,13 @@ class RainMapView(ctx: Context) : View(ctx) {
         invalidate()
     }
 
+    /** Tinggi peta = lebar × aspect (tab Rider guna peta lebih tinggi). */
+    var aspect = 1f
+        set(v) { field = v; requestLayout() }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val s = MeasureSpec.getSize(widthMeasureSpec)
-        setMeasuredDimension(s, s)
+        setMeasuredDimension(s, (s * aspect).toInt())
     }
 
     /** Interpolasi grid mm/jam → bitmap kecil berwarna ikut tahap (lutsinar bila tiada hujan). */
