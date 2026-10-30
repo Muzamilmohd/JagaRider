@@ -132,7 +132,7 @@ class MyRidePage(private val act: MainActivity) {
         val perDay = DoubleArray(7)
         for (r in week) perDay[((r.start - weekStart) / DAY).toInt().coerceIn(0, 6)] += r.km
         val today = ((System.currentTimeMillis() - weekStart) / DAY).toInt().coerceIn(0, 6)
-        c.addView(WeekChart(act, perDay, today), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, act.dp(150)).apply { topMargin = act.dp(12) })
+        c.addView(WeekChart(act, perDay, today, "🏍️ " + t("Belum ada ride minggu ini — jom ride!", "No rides this week yet — let's ride!", "本周还没有骑行——出发吧！", "இந்த வாரம் இன்னும் பயணம் இல்லை — பயணிப்போம்!")), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, act.dp(150)).apply { topMargin = act.dp(12) })
 
         // Bulan ini
         val cal = Calendar.getInstance()
@@ -371,7 +371,7 @@ class MyRidePage(private val act: MainActivity) {
 }
 
 /** Carta bar km setiap hari (Isnin–Ahad); hari ini ditanda oren. */
-private class WeekChart(ctx: Context, private val km: DoubleArray, private val today: Int) : View(ctx) {
+private class WeekChart(ctx: Context, private val km: DoubleArray, private val today: Int, private val empty: String) : View(ctx) {
     private val pal = Ui.palette(ctx)
     private val density = ctx.resources.displayMetrics.density
     private val bar = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -396,6 +396,14 @@ private class WeekChart(ctx: Context, private val km: DoubleArray, private val t
         val max = (km.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
         val slot = w / 7
         val bw = slot * 0.55f
+        if (km.all { it < 0.05 }) {
+            text.color = pal.sub
+            text.typeface = Typeface.DEFAULT
+            text.textSize = 14 * density
+            while (text.measureText(empty) > w * 0.95f && text.textSize > 9 * density) text.textSize -= density
+            canvas.drawText(empty, w / 2, (top + bottom) / 2, text)
+            text.textSize = 11 * density
+        }
         for (i in 0 until 7) {
             val cx = slot * i + slot / 2
             val frac = (km[i] / max).toFloat()
