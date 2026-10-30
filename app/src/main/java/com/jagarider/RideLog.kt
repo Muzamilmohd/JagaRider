@@ -7,7 +7,7 @@ import org.json.JSONObject
 
 /**
  * Rekod ride: jarak, masa bergerak, purata & laju maksimum — dikira dalam phone sahaja semasa
- * LocationShareService berjalan (kongsi dengan kumpulan atau ride solo). 30 ride terakhir disimpan.
+ * LocationShareService berjalan (kongsi dengan kumpulan atau ride solo). 200 ride terakhir disimpan.
  */
 object RideLog {
 
@@ -92,7 +92,7 @@ object RideLog {
         }
         arr.put(JSONObject().put("s", r.start).put("e", r.end).put("k", r.km).put("m", r.movingMs).put("x", r.maxKmh).put("l", r.label).put("a", r.auto))
         val keep = JSONArray()
-        for (i in maxOf(0, arr.length() - 30) until arr.length()) keep.put(arr.get(i))
+        for (i in maxOf(0, arr.length() - 200) until arr.length()) keep.put(arr.get(i))
         sp(c).edit().putString("list", keep.toString()).apply()
         return r
     }

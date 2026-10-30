@@ -129,10 +129,10 @@ class RiderPage(private val act: MainActivity) {
         rowInfo.clear()
         col.addView(LinearLayout(act).apply {
             gravity = Gravity.CENTER_VERTICAL
-            addView(act.label("🏍️", 34f).apply { setPadding(0, 0, act.dp(10), 0) })
+            addView(act.label("👥", 34f).apply { setPadding(0, 0, act.dp(10), 0) })
             addView(LinearLayout(act).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(act.label(t("Rider", "Riders", "骑手", "ரைடர்கள்"), 26f, bold = true, color = act.pal.orange).apply { setPadding(0, 0, 0, 0) })
+                addView(act.label(t("Ride Kumpulan", "Group Ride", "群组骑行", "குழுப் பயணம்"), 26f, bold = true, color = act.pal.orange).apply { setPadding(0, 0, 0, 0) })
                 addView(act.label(t("Kongsi lokasi live dengan kawan ride", "Share live location with your riding buddies", "与骑行伙伴共享实时位置", "சக ரைடர்களுடன் நேரடி இருப்பிடத்தைப் பகிரவும்"), 14f, color = act.pal.sub).apply { setPadding(0, 0, 0, 0) })
             })
         })
@@ -154,7 +154,7 @@ class RiderPage(private val act: MainActivity) {
             selected = null
             buildNameCard()
             buildList()
-            buildRides()
+            buildSaver()
         } else {
             buildDetail(g)
         }
@@ -224,89 +224,32 @@ class RiderPage(private val act: MainActivity) {
         }, act.lp(top = 8))
     }
 
-    /** Ride solo (rekod tanpa kumpulan) + rekod ride terkini. */
-    private fun buildRides() {
+    /** Mod jimat bateri (ride jauh) — di sini supaya mudah ditukar sebelum / semasa kongsi. */
+    private fun buildSaver() {
         val c = act.card()
         col.addView(c, act.lp(top = 12))
-        c.addView(act.label("📊 " + t("Rekod ride", "Ride log", "骑行记录", "பயணப் பதிவு"), 18f, bold = true))
-        val solo = RideLog.solo(act) && LocationShareService.running
-        c.addView(act.pill(
-            if (solo) "⏹ " + t("Tamat ride solo", "End solo ride", "结束单人骑行", "தனிப் பயணத்தை முடி")
-            else "▶ " + t("Mula ride solo (rekod sahaja)", "Start solo ride (record only)", "开始单人骑行（仅记录）", "தனிப் பயணம் தொடங்கு (பதிவு மட்டும்)"),
-            primary = !solo,
-        ) {
-            if (solo) {
-                LocationShareService.stopSolo(act)
-            } else if (!hasLocation()) {
-                act.requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 21)
-                return@pill
-            } else {
-                LocationShareService.startSolo(act)
-            }
-            main.postDelayed({ build() }, 800)
-        }, act.lp(top = 6))
-        RideLog.current()?.let { (km, moving, max) ->
-            val dur = durText(System.currentTimeMillis() - RideLog.currentStart())
-            c.addView(act.label("🏍️ " + t("Ride semasa", "Current ride", "当前骑行", "தற்போதைய பயணம்") +
-                String.format(Locale.US, ": %.1f km · %s · %s %.0f %s", km, dur, Weather.maxWord, max, Weather.kmh), 14f, bold = true, color = act.pal.orange), act.lp(top = 6))
-        }
+        c.addView(saverSwitch())
         c.addView(act.label(t(
-            "Rekod dibuat bila anda kongsi lokasi, ride solo atau auto rekod (Tetapan) — disimpan dalam phone sahaja. Tekan lama satu ride untuk buang.",
-            "Rides are recorded while you share location, ride solo or with auto-record (Settings) — stored on this phone only. Long-press a ride to delete it.",
-            "共享位置、单人骑行或自动记录（设置）时会记录——仅保存在此手机。长按某次骑行可删除。",
-            "இருப்பிடம் பகிரும்போது, தனிப் பயணத்தில் அல்லது தானியங்கிப் பதிவில் (அமைப்புகள்) பதிவாகும் — இந்த தொலைபேசியில் மட்டும். நீக்க ஒரு பயணத்தை நீண்ட நேரம் அழுத்தவும்.",
-        ), 12f, color = act.pal.sub))
-
-        val rides = RideLog.rides(act)
-        if (rides.isEmpty()) return
-        // Jumlah bulan ini
-        val cal = java.util.Calendar.getInstance()
-        val month = rides.filter {
-            val k = java.util.Calendar.getInstance().apply { timeInMillis = it.start }
-            k.get(java.util.Calendar.MONTH) == cal.get(java.util.Calendar.MONTH) && k.get(java.util.Calendar.YEAR) == cal.get(java.util.Calendar.YEAR)
-        }
-        if (month.isNotEmpty()) {
-            val n = month.size
-            val km = month.sumOf { it.km }
-            c.addView(act.label("🗓️ " + t(
-                String.format(Locale.US, "Bulan ini: %d ride · %.0f km", n, km),
-                String.format(Locale.US, "This month: %d rides · %.0f km", n, km),
-                String.format(Locale.US, "本月：%d 次骑行 · %.0f 公里", n, km),
-                String.format(Locale.US, "இந்த மாதம்: %d பயணம் · %.0f கி.மீ.", n, km),
-            ), 15f, bold = true), act.lp(top = 8))
-        }
-        val fmt = java.text.SimpleDateFormat("d MMM", Locale.US)
-        for (r in rides.take(5)) {
-            val line = fmt.format(java.util.Date(r.start)) + " " + Clock.time(r.start) +
-                String.format(Locale.US, " · %.1f km · %s", r.km, durText(r.end - r.start)) +
-                (if (r.avgKmh > 0) String.format(Locale.US, " · ~%.0f %s", r.avgKmh, Weather.kmh) else "") +
-                String.format(Locale.US, " · %s %.0f", Weather.maxWord, r.maxKmh)
-            c.addView(act.label(line, 13f).apply {
-                setPadding(act.dp(10), act.dp(6), act.dp(10), act.dp(6))
-                background = GradientDrawable().apply {
-                    setColor(act.pal.bg)
-                    cornerRadius = act.dp(10).toFloat()
-                }
-                setOnLongClickListener {
-                    AlertDialog.Builder(act)
-                        .setTitle("🗑️ " + t("Buang ride ini?", "Delete this ride?", "删除此次骑行？", "இந்தப் பயணத்தை நீக்கவா?"))
-                        .setMessage(line)
-                        .setPositiveButton(t("Buang", "Delete", "删除", "நீக்கு")) { _, _ ->
-                            RideLog.remove(act, r.start)
-                            build()
-                        }
-                        .setNegativeButton(t("Batal", "Cancel", "取消", "ரத்து"), null)
-                        .show()
-                    true
-                }
-            }, act.lp(top = 4))
-            if (r.label.isNotBlank()) c.addView(act.label("   " + (if (r.auto) "🤖 " else "") + r.label, 11f, color = act.pal.sub))
-        }
+            "Kongsi lokasi setiap 30 saat (bukan 10 saat) dan GPS lebih jarang — sesuai untuk ride jauh. Ahli lain nampak kedudukan anda kurang kerap.",
+            "Shares location every 30 s (instead of 10 s) with less frequent GPS — good for long rides. Others see your position update less often.",
+            "每30秒（而非10秒）共享一次位置，GPS 更少更新——适合长途骑行。其他人看到您的位置更新会较慢。",
+            "30 வினாடிக்கு ஒருமுறை (10 அல்ல) இருப்பிடம் பகிரும், GPS குறைவாக — நீண்ட பயணத்துக்கு ஏற்றது. மற்றவர்கள் உங்கள் இடத்தைக் குறைவாகப் பார்ப்பார்கள்.",
+        ), 13f, color = act.pal.sub))
     }
 
-    private fun durText(ms: Long): String {
-        val m = ms / 60_000L
-        return if (m >= 60) String.format(Locale.US, "%dj %02dm", m / 60, m % 60) else "${m}m"
+    private fun saverSwitch() = android.widget.Switch(act).apply {
+        text = "🔋 " + t("Mod jimat bateri (ride jauh)", "Battery saver (long rides)", "省电模式（长途骑行）", "பேட்டரி சேமிப்பு (நீண்ட பயணம்)")
+        textSize = 15f
+        setTextColor(act.pal.text)
+        setPadding(act.dp(4), act.dp(6), act.dp(4), act.dp(6))
+        isChecked = Prefs.batterySaver(act)
+        setOnCheckedChangeListener { _, on ->
+            Prefs.setBatterySaver(act, on)
+            // Sedang berkongsi — mula semula GPS dengan kadar baru
+            if (LocationShareService.running) act.startForegroundService(android.content.Intent(act, LocationShareService::class.java))
+            toast(if (on) "🔋 " + t("Jimat bateri: kongsi setiap 30 saat", "Battery saver: sharing every 30 s", "省电：每30秒共享", "பேட்டரி சேமிப்பு: 30 வினாடிக்கு ஒருமுறை")
+                else "⚡ " + t("Kongsi setiap 10 saat", "Sharing every 10 s", "每10秒共享", "10 வினாடிக்கு ஒருமுறை பகிர்வு"))
+        }
     }
 
     private fun groupInfo(g: RiderGroup.Group, sharing: Set<String>): String {
@@ -362,6 +305,7 @@ class RiderPage(private val act: MainActivity) {
         statusText = act.label("", 13f, color = act.pal.sub).apply { gravity = Gravity.CENTER }
         col.addView(statusText)
         styleShare(g)
+        col.addView(saverSwitch(), act.lp(top = 2))
 
         // Mesej pantas: satu tekan semasa ride (ahli dapat notifikasi + suara)
         col.addView(android.widget.HorizontalScrollView(act).apply {

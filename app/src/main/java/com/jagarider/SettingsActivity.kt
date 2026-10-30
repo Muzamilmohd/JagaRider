@@ -26,49 +26,11 @@ class SettingsActivity : BaseActivity() {
     private var updateText: TextView? = null
     private lateinit var locStatus: TextView
     private lateinit var locBtn: Button
-    private var autoSwitch: Switch? = null
-    private var autoStatus: TextView? = null
 
     override fun onResume() {
         super.onResume()
         // Pulang dari skrin kebenaran Android — kemas kini status
         if (::locStatus.isInitialized) refreshLocStatus()
-        refreshAutoStatus()
-    }
-
-    /** Auto rekod ride: perlu sensor gerakan + lokasi sepanjang masa (GPS dimulakan semasa app ditutup). */
-    private fun refreshAutoStatus() {
-        val st = autoStatus ?: return
-        val on = AutoRide.enabled(this)
-        autoSwitch?.isChecked = on
-        val missing = on && !AutoRide.ready(this)
-        st.text = if (missing) {
-            "⚠️ " + t(
-                "Perlu kebenaran \"Aktiviti fizikal\" dan lokasi \"sepanjang masa\". Tekan di sini untuk beri kebenaran.",
-                "Needs \"Physical activity\" and location \"all the time\" permissions. Tap here to grant them.",
-                "需要“身体活动”权限和“始终允许”定位。点击此处授予权限。",
-                "\"உடல் செயல்பாடு\" மற்றும் \"எப்போதும்\" இருப்பிட அனுமதி தேவை. அனுமதி வழங்க இங்கே தட்டவும்.",
-            )
-        } else {
-            t(
-                "Sensor gerakan phone kesan bila anda naik motor, kemudian rekod bermula bila laju 20 km/j dan tamat bila berhenti 5 minit. Berhenti isi minyak / makan (bawah 15 minit) dikira satu ride. Sensor tak boleh beza motor dengan kereta — tekan \"Bukan ride? Buang\" dalam notifikasi.",
-                "The phone's motion sensor notices when you get on the bike; recording starts at 20 km/h and ends after a 5-minute stop. Fuel / food stops (under 15 min) count as one ride. The sensor can't tell a bike from a car — tap \"Not a ride? Delete\" in the notification.",
-                "手机的运动传感器会察觉您上车；时速达到20公里开始记录，停下5分钟后结束。加油/用餐停留（15分钟内）算作同一次骑行。传感器无法区分摩托车和汽车——可在通知中点“不是骑行？删除”。",
-                "நீங்கள் பைக்கில் ஏறியதை போனின் இயக்க சென்சார் கண்டறியும்; 20 கி.மீ./ம வேகத்தில் பதிவு தொடங்கி 5 நிமிடம் நின்றால் முடியும். எரிபொருள் / உணவு நிறுத்தம் (15 நிமி. குறைவு) ஒரே பயணம். சென்சாரால் பைக்கையும் காரையும் வேறுபடுத்த முடியாது — அறிவிப்பில் \"பயணம் இல்லையா? நீக்கு\" தட்டவும்.",
-            )
-        }
-        st.setTextColor(if (missing) pal.orange else pal.sub)
-    }
-
-    /** Hidupkan auto rekod: minta kebenaran satu-satu (aktiviti fizikal → lokasi sepanjang masa). */
-    private fun enableAutoRide() {
-        if (!AutoRide.hasActivityPermission(this)) {
-            requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), REQ_ACT)
-            return
-        }
-        AutoRide.setEnabled(this, true)
-        if (!RainAlert.hasBackgroundLocation(this)) askBackgroundLocation()
-        refreshAutoStatus()
     }
 
     private fun refreshLocStatus() {
@@ -120,14 +82,6 @@ class SettingsActivity : BaseActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         when (requestCode) {
-            REQ_ACT -> {
-                if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
-                    enableAutoRide()
-                } else if (!shouldShowRequestPermissionRationale(Manifest.permission.ACTIVITY_RECOGNITION)) {
-                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-                }
-                refreshAutoStatus()
-            }
             REQ_FG -> if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) askBackgroundLocation()
             REQ_BG -> {
                 refreshLocStatus()
@@ -142,7 +96,6 @@ class SettingsActivity : BaseActivity() {
     companion object {
         private const val REQ_FG = 11
         private const val REQ_BG = 12
-        private const val REQ_ACT = 13
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -282,41 +235,6 @@ class SettingsActivity : BaseActivity() {
             addView(pill("⛈️ " + t("Cuba bunyi ribut", "Test storm", "试听雷雨", "புயல் ஒலி")) { RainAlert.test(this@SettingsActivity, RainAlert.STORM) },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(4), 0, 0, 0) })
         }, lp(top = 8))
-
-        // Ride: mod jimat bateri
-        col.addView(header("🏍️ " + t("Ride", "Riding", "骑行", "பயணம்")))
-        val rideCard = card()
-        col.addView(rideCard, lp(top = 8))
-        rideCard.addView(Switch(this).apply {
-            text = "🔋 " + t("Mod jimat bateri (ride jauh)", "Battery saver (long rides)", "省电模式（长途骑行）", "பேட்டரி சேமிப்பு (நீண்ட பயணம்)")
-            textSize = 15f
-            setTextColor(pal.text)
-            isChecked = Prefs.batterySaver(this@SettingsActivity)
-            setOnCheckedChangeListener { _, on -> Prefs.setBatterySaver(this@SettingsActivity, on) }
-        })
-        rideCard.addView(label(t(
-            "Kongsi lokasi setiap 30 saat (bukan 10 saat) dan GPS lebih jarang. Mula berkesan pada kongsi / ride seterusnya.",
-            "Shares location every 30 s (instead of 10 s) with less frequent GPS. Takes effect on the next share / ride.",
-            "每30秒（而非10秒）共享一次位置，GPS 更少更新。下次共享/骑行时生效。",
-            "30 வினாடிக்கு ஒருமுறை (10 அல்ல) இருப்பிடம் பகிரும், GPS குறைவாக. அடுத்த பயணத்தில் நடைமுறைக்கு வரும்.",
-        ), 13f, color = pal.sub))
-        autoSwitch = Switch(this).apply {
-            text = "🤖 " + t("Auto rekod ride", "Auto-record rides", "自动记录骑行", "பயணத்தைத் தானாகப் பதிவு செய்")
-            textSize = 15f
-            setTextColor(pal.text)
-            isChecked = AutoRide.enabled(this@SettingsActivity)
-            // klik (bukan setOnChecked) — refreshAutoStatus ubah isChecked tanpa cetus semula
-            setOnClickListener {
-                if (isChecked) enableAutoRide() else AutoRide.setEnabled(this@SettingsActivity, false)
-                refreshAutoStatus()
-            }
-        }
-        rideCard.addView(autoSwitch, lp(top = 14))
-        autoStatus = label("", 13f).also {
-            it.setOnClickListener { if (AutoRide.enabled(this) && !AutoRide.ready(this)) enableAutoRide() }
-            rideCard.addView(it)
-        }
-        refreshAutoStatus()
 
         // Kemas kini app
         col.addView(header(t("Kemas kini app", "App updates", "应用更新", "ஆப் புதுப்பிப்புகள்")))

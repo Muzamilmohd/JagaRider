@@ -135,7 +135,7 @@ class LocationShareService : Service(), LocationListener {
             NotificationChannel(CH_AUTO, t("Auto rekod ride", "Auto ride recording", "自动骑行记录", "தானியங்கி பயணப் பதிவு"), NotificationManager.IMPORTANCE_LOW)
         )
         val open = PendingIntent.getActivity(
-            this, 8, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_RIDER_TAB, true)
+            this, 8, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_MY_RIDE_TAB, true)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -354,7 +354,7 @@ class LocationShareService : Service(), LocationListener {
             NotificationChannel(CH, t("Kongsi lokasi rider", "Rider location sharing", "骑手位置共享", "ரைடர் இருப்பிடப் பகிர்வு"), NotificationManager.IMPORTANCE_LOW)
         )
         val open = PendingIntent.getActivity(
-            this, 3, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_RIDER_TAB, true)
+            this, 3, Intent(this, MainActivity::class.java).putExtra(if (list.isEmpty()) MainActivity.EXTRA_MY_RIDE_TAB else MainActivity.EXTRA_RIDER_TAB, true)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -379,7 +379,7 @@ class LocationShareService : Service(), LocationListener {
             NotificationChannel(CH, t("Kongsi lokasi rider", "Rider location sharing", "骑手位置共享", "ரைடர் இருப்பிடப் பகிர்வு"), NotificationManager.IMPORTANCE_LOW)
         )
         val open = PendingIntent.getActivity(
-            this, 3, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_RIDER_TAB, true)
+            this, 3, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_MY_RIDE_TAB, true)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )

@@ -71,12 +71,14 @@ class MainActivity : BaseActivity() {
         }
         weatherPage = ScrollView(this).apply { addView(col) }
         riderPage = RiderPage(this)
-        // Dua halaman (Cuaca / Rider) + bar tab di bawah
+        myRidePage = MyRidePage(this)
+        // Tiga halaman (Cuaca / Ride Kumpulan / Ride Saya) + bar tab di bawah
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(FrameLayout(this@MainActivity).apply {
                 addView(weatherPage)
                 addView(riderPage.root)
+                addView(myRidePage.root)
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
             addView(tabBar())
         }
@@ -253,7 +255,7 @@ class MainActivity : BaseActivity() {
             val stale = System.currentTimeMillis() - Prefs.lastUpdateCheck(this) > 12 * 60 * 60_000L
             if (fromNotification || (Prefs.autoUpdate(this) && stale)) UpdateUi.check(this, quiet = !fromNotification) {}
         }
-        showTab(if (intent.getBooleanExtra(EXTRA_RIDER_TAB, false)) 1 else (savedInstanceState?.getInt("tab") ?: 0))
+        showTab(intentTab(intent) ?: savedInstanceState?.getInt("tab") ?: 0)
     }
 
     override fun onSaveInstanceState(out: Bundle) {
@@ -266,18 +268,27 @@ class MainActivity : BaseActivity() {
         val wait = (refreshMs() - (System.currentTimeMillis() - lastRefresh)).coerceAtLeast(0)
         main.postDelayed(autoRefresh, if (lastRefresh == 0L) 0 else wait)
         if (tab == 1) riderPage.onShow()
+        if (tab == 2) myRidePage.onShow()
     }
 
     override fun onPause() {
         super.onPause()
         main.removeCallbacks(autoRefresh)
         riderPage.onHide()
+        myRidePage.onHide()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra(EXTRA_CHECK_UPDATE, false)) UpdateUi.check(this, quiet = false) {}
-        if (intent.getBooleanExtra(EXTRA_RIDER_TAB, false)) showTab(1)
+        intentTab(intent)?.let { showTab(it) }
+    }
+
+    /** Tab yang diminta oleh notifikasi (null = tiada). */
+    private fun intentTab(i: Intent): Int? = when {
+        i.getBooleanExtra(EXTRA_MY_RIDE_TAB, false) -> 2
+        i.getBooleanExtra(EXTRA_RIDER_TAB, false) -> 1
+        else -> null
     }
 
     // ------------------------------------------------------------ peta skrin penuh
@@ -331,6 +342,7 @@ class MainActivity : BaseActivity() {
 
     private lateinit var weatherPage: ScrollView
     private lateinit var riderPage: RiderPage
+    private lateinit var myRidePage: MyRidePage
     private var tab = 0
     private val tabViews = mutableListOf<LinearLayout>()
 
@@ -340,7 +352,8 @@ class MainActivity : BaseActivity() {
         setPadding(0, dp(4), 0, dp(4))
         val tabs = listOf(
             "🌧️" to t("Cuaca", "Weather", "天气", "வானிலை"),
-            "🏍️" to t("Rider", "Riders", "骑手", "ரைடர்கள்"),
+            "👥" to t("Ride Kumpulan", "Group Ride", "群组骑行", "குழுப் பயணம்"),
+            "🏍️" to t("Ride Saya", "My Ride", "我的骑行", "என் பயணம்"),
         )
         for ((i, pair) in tabs.withIndex()) {
             val v = LinearLayout(this@MainActivity).apply {
@@ -378,7 +391,9 @@ class MainActivity : BaseActivity() {
         tab = i
         weatherPage.visibility = if (i == 0) View.VISIBLE else View.GONE
         riderPage.root.visibility = if (i == 1) View.VISIBLE else View.GONE
+        myRidePage.root.visibility = if (i == 2) View.VISIBLE else View.GONE
         if (i == 1) riderPage.onShow() else riderPage.onHide()
+        if (i == 2) myRidePage.onShow() else myRidePage.onHide()
         setRiderBackHandler(i == 1 && riderPage.inDetail)
         for ((k, v) in tabViews.withIndex()) {
             val on = k == i
@@ -392,6 +407,7 @@ class MainActivity : BaseActivity() {
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (myRidePage.onPermissionResult(requestCode, grantResults.any { it == PackageManager.PERMISSION_GRANTED })) return
         if (requestCode != REQ_PERMS) return
         if (hasLocationPermission()) {
             refresh(force = true)
@@ -807,6 +823,7 @@ class MainActivity : BaseActivity() {
     companion object {
         const val EXTRA_CHECK_UPDATE = "check_update"
         const val EXTRA_RIDER_TAB = "rider_tab"
+        const val EXTRA_MY_RIDE_TAB = "my_ride_tab"
         private const val REQ_PERMS = 1
         private val RANGES = listOf(5, 10, 25, 50, 100, 200, 300, Weather.PENINSULA)
     }
