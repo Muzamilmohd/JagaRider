@@ -25,8 +25,8 @@ android {
         applicationId = "com.jagarider"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "3.0"
+        versionCode = 22
+        versionName = "3.1"
 
         // Repo GitHub (owner/nama) tempat semak update — tetapkan dalam gradle.properties
         val repo = (project.findProperty("jagarider.updateRepo") as String?).orEmpty()
@@ -73,4 +73,6 @@ dependencies {
     // pengimbas QR Google (UI kamera disediakan Play services, tiada kebenaran kamera) + ZXing untuk jana QR.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("com.google.zxing:core:3.5.3")
+    // v3.1: sensor gerakan (Activity Recognition) untuk auto rekod ride — hampir tiada bateri berbanding GPS
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }

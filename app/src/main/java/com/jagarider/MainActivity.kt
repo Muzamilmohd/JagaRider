@@ -246,6 +246,7 @@ class MainActivity : BaseActivity() {
         if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), REQ_PERMS)
 
         RainAlert.schedule(this)
+        AutoRide.register(this)
         if (Updater.enabled) {
             Updater.schedule(this)
             val fromNotification = intent.getBooleanExtra(EXTRA_CHECK_UPDATE, false)

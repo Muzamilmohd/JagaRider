@@ -289,5 +289,6 @@ class RescheduleReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         RainAlert.schedule(ctx)
         Updater.schedule(ctx)
+        AutoRide.register(ctx) // pendaftaran sensor gerakan hilang bila restart / kemas kini
     }
 }

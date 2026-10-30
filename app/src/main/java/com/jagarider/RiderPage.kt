@@ -251,10 +251,10 @@ class RiderPage(private val act: MainActivity) {
                 String.format(Locale.US, ": %.1f km · %s · %s %.0f %s", km, dur, Weather.maxWord, max, Weather.kmh), 14f, bold = true, color = act.pal.orange), act.lp(top = 6))
         }
         c.addView(act.label(t(
-            "Rekod dibuat bila anda kongsi lokasi atau ride solo — disimpan dalam phone sahaja.",
-            "Rides are recorded while you share location or ride solo — stored on this phone only.",
-            "共享位置或单人骑行时会记录——仅保存在此手机。",
-            "இருப்பிடம் பகிரும்போது அல்லது தனிப் பயணத்தில் பதிவாகும் — இந்த தொலைபேசியில் மட்டும்.",
+            "Rekod dibuat bila anda kongsi lokasi, ride solo atau auto rekod (Tetapan) — disimpan dalam phone sahaja. Tekan lama satu ride untuk buang.",
+            "Rides are recorded while you share location, ride solo or with auto-record (Settings) — stored on this phone only. Long-press a ride to delete it.",
+            "共享位置、单人骑行或自动记录（设置）时会记录——仅保存在此手机。长按某次骑行可删除。",
+            "இருப்பிடம் பகிரும்போது, தனிப் பயணத்தில் அல்லது தானியங்கிப் பதிவில் (அமைப்புகள்) பதிவாகும் — இந்த தொலைபேசியில் மட்டும். நீக்க ஒரு பயணத்தை நீண்ட நேரம் அழுத்தவும்.",
         ), 12f, color = act.pal.sub))
 
         val rides = RideLog.rides(act)
@@ -287,8 +287,20 @@ class RiderPage(private val act: MainActivity) {
                     setColor(act.pal.bg)
                     cornerRadius = act.dp(10).toFloat()
                 }
+                setOnLongClickListener {
+                    AlertDialog.Builder(act)
+                        .setTitle("🗑️ " + t("Buang ride ini?", "Delete this ride?", "删除此次骑行？", "இந்தப் பயணத்தை நீக்கவா?"))
+                        .setMessage(line)
+                        .setPositiveButton(t("Buang", "Delete", "删除", "நீக்கு")) { _, _ ->
+                            RideLog.remove(act, r.start)
+                            build()
+                        }
+                        .setNegativeButton(t("Batal", "Cancel", "取消", "ரத்து"), null)
+                        .show()
+                    true
+                }
             }, act.lp(top = 4))
-            if (r.label.isNotBlank()) c.addView(act.label("   " + r.label, 11f, color = act.pal.sub))
+            if (r.label.isNotBlank()) c.addView(act.label("   " + (if (r.auto) "🤖 " else "") + r.label, 11f, color = act.pal.sub))
         }
     }
 

@@ -17,6 +17,9 @@
     <!-- Kongsi lokasi live dengan kumpulan rider (servis latar depan, hanya bila rider tekan Mula) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Pilihan: auto rekod ride — sensor gerakan kesan bila mula naik kenderaan -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
 
     <!-- Enjin suara (amaran suara) + app peta untuk navigasi -->
     <queries>
@@ -52,6 +55,11 @@
             android:name=".LocationShareService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- Auto rekod ride: peristiwa sensor gerakan + butang "Bukan ride? Buang" -->
+        <receiver
+            android:name=".AutoRideReceiver"
+            android:exported="false" />
 
         <!-- Amaran hujan di latar (~15 minit) -->
         <service

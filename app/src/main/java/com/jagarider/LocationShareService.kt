@@ -62,6 +62,101 @@ class LocationShareService : Service(), LocationListener {
             worker.postDelayed(this, if (Prefs.batterySaver(this@LocationShareService)) 60_000L else 20_000L)
         }
     }
+    // ------------------------------------------------------------ auto rekod (AutoRide)
+
+    /** Sesi auto sahaja (tiada kongsi / ride solo). */
+    private var autoOnly = false
+    private var armedAt = 0L
+    private var fastSince = 0L
+    private var confirmed = false
+    private var lastMove = 0L
+    private var anchor: Location? = null
+
+    /** Setiap 15 saat dalam sesi auto: batal kalau tak disahkan, tamat bila berhenti lama. */
+    private val autoTick = object : Runnable {
+        override fun run() {
+            if (!autoOnly) return
+            val now = System.currentTimeMillis()
+            if (!confirmed && now - armedAt > AutoRide.ARM_TIMEOUT_MS) {
+                endAuto(save = false)
+                return
+            }
+            if (confirmed && now - lastMove > AutoRide.STOP_MS) {
+                endAuto(save = true)
+                return
+            }
+            worker.postDelayed(this, 15_000L)
+        }
+    }
+
+    /** Sahkan ride (laju ≥ 20 km/j selama 30 s) dan jejak bila kali terakhir bergerak. */
+    private fun autoCheck(loc: Location) {
+        val now = System.currentTimeMillis()
+        val kmh = if (loc.hasSpeed()) loc.speed * 3.6 else 0.0
+        if (!confirmed) {
+            if (kmh >= AutoRide.START_KMH) {
+                if (fastSince == 0L) fastSince = now
+                if (now - fastSince >= AutoRide.CONFIRM_MS) {
+                    confirmed = true
+                    lastMove = now
+                    anchor = loc
+                    getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification(emptyList()))
+                }
+            } else if (kmh < 10) {
+                fastSince = 0L
+            }
+            return
+        }
+        val a = anchor
+        if (kmh >= 8 || a == null || a.distanceTo(loc) > 100f) {
+            lastMove = now
+            anchor = loc
+        }
+    }
+
+    /** Tamat sesi auto: simpan ride (masa tamat = kali terakhir bergerak) atau batal, kemudian henti servis. */
+    private fun endAuto(save: Boolean) {
+        if (save) {
+            RideLog.finish(this, lastMove)?.let { autoDone(it) }
+        } else {
+            RideLog.cancel()
+        }
+        RideLog.setAutoSession(this, false)
+        autoOnly = false
+        running = false
+        stopSelf()
+    }
+
+    /** Notifikasi ringkasan ride auto + butang "Bukan ride? Buang" (sensor tak boleh beza motor / kereta). */
+    @SuppressLint("MissingPermission")
+    private fun autoDone(r: RideLog.Ride) {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(CH_AUTO, t("Auto rekod ride", "Auto ride recording", "自动骑行记录", "தானியங்கி பயணப் பதிவு"), NotificationManager.IMPORTANCE_LOW)
+        )
+        val open = PendingIntent.getActivity(
+            this, 8, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_RIDER_TAB, true)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val discard = PendingIntent.getBroadcast(
+            this, 9, Intent(this, AutoRideReceiver::class.java).setAction(AutoRide.ACTION_DISCARD).putExtra(AutoRide.EXTRA_START, r.start),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val min = (r.end - r.start) / 60_000L
+        val dur = if (min >= 60) String.format(java.util.Locale.US, "%d:%02d", min / 60, min % 60) else "$min min"
+        val text = String.format(java.util.Locale.US, "%.1f km · %s · ", r.km, dur) + Weather.maxWord + String.format(java.util.Locale.US, " %.0f ", r.maxKmh) + Weather.kmh
+        val n = Notification.Builder(this, CH_AUTO)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle("🏍️ " + t("Ride direkod", "Ride recorded", "骑行已记录", "பயணம் பதிவானது"))
+            .setContentText(text)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .addAction(Notification.Action.Builder(null, t("Bukan ride? Buang", "Not a ride? Delete", "不是骑行？删除", "பயணம் இல்லையா? நீக்கு"), discard).build())
+            .build()
+        runCatching { nm.notify(AUTO_DONE_ID, n) }
+    }
+
     private val stillSince = HashMap<String, Pair<Pair<Double, Double>, Long>>()
     private val alerted = HashMap<String, Long>()
 
@@ -156,17 +251,36 @@ class LocationShareService : Service(), LocationListener {
         }
         val groups = sharedGroups(this)
         val solo = RideLog.solo(this)
-        if ((groups.isEmpty() || !Firebase.enabled) && !solo) {
+        val manual = (groups.isNotEmpty() && Firebase.enabled) || solo
+        if (!manual && !RideLog.autoSession(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Kongsi / ride solo dimulakan semasa sesi auto → jadi sesi biasa (ride yang sedang direkod diteruskan)
+        if (manual && RideLog.autoSession(this)) RideLog.setAutoSession(this, false)
+        autoOnly = !manual
         val n = notification(groups)
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         else startForeground(NOTIF_ID, n)
         running = true
         lastSent = 0L // kumpulan baru ditambah — hantar segera pada lokasi seterusnya
-        RideLog.begin(this)
-        RideLog.label = if (groups.isEmpty()) t("Ride solo", "Solo ride", "单人骑行", "தனிப் பயணம்") else groups.joinToString(", ") { it.name }
+        if (autoOnly) {
+            if (armedAt == 0L) {
+                armedAt = System.currentTimeMillis()
+                fastSince = 0L
+                confirmed = false
+                RideLog.begin(this)
+                RideLog.auto = true
+                RideLog.label = t("Auto", "Auto", "自动", "தானியங்கி")
+            }
+            worker.removeCallbacks(autoTick)
+            worker.postDelayed(autoTick, 15_000L)
+        } else {
+            worker.removeCallbacks(autoTick)
+            RideLog.begin(this)
+            RideLog.auto = false
+            RideLog.label = if (groups.isEmpty()) t("Ride solo", "Solo ride", "单人骑行", "தனிப் பயணம்") else groups.joinToString(", ") { it.name }
+        }
         worker.removeCallbacks(expiryTick)
         worker.postDelayed(expiryTick, 30_000L)
         worker.removeCallbacks(groupTick)
@@ -195,6 +309,7 @@ class LocationShareService : Service(), LocationListener {
         ) return
         last = loc
         RideLog.add(loc)
+        if (autoOnly) autoCheck(loc)
         val now = System.currentTimeMillis()
         if (now - lastSent < (if (Prefs.batterySaver(this)) 30_000L else 10_000L)) return
         lastSent = now
@@ -212,7 +327,9 @@ class LocationShareService : Service(), LocationListener {
     override fun onProviderDisabled(provider: String) {}
 
     override fun onDestroy() {
-        RideLog.finish(this)
+        // Sesi auto yang belum disahkan bukan ride — jangan simpan
+        if (autoOnly && !confirmed) RideLog.cancel() else RideLog.finish(this)
+        if (autoOnly) RideLog.setAutoSession(this, false)
         running = false
         runCatching { getSystemService(LocationManager::class.java).removeUpdates(this) }
         worker.looper.quitSafely()
@@ -220,6 +337,7 @@ class LocationShareService : Service(), LocationListener {
     }
 
     private fun notification(list: List<RiderGroup.Group>): Notification {
+        if (autoOnly) return autoNotification()
         val groups = if (list.isEmpty()) "🏍️ " + t("Ride solo", "Solo ride", "单人骑行", "தனிப் பயணம்") else list.joinToString(", ") { it.icon + " " + it.name }
         // tempoh tamat paling awal (0 = sehingga ditekan Henti)
         val end = list.map { RiderGroup.shareUntil(this, it.code) }.filter { it > 0 }.minOrNull()
@@ -254,7 +372,41 @@ class LocationShareService : Service(), LocationListener {
             .build()
     }
 
+    /** Notifikasi tetap sesi auto: menyemak dulu, kemudian "ride direkod". Tiada lokasi dikongsi. */
+    private fun autoNotification(): Notification {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(CH, t("Kongsi lokasi rider", "Rider location sharing", "骑手位置共享", "ரைடர் இருப்பிடப் பகிர்வு"), NotificationManager.IMPORTANCE_LOW)
+        )
+        val open = PendingIntent.getActivity(
+            this, 3, Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_RIDER_TAB, true)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val stop = PendingIntent.getService(
+            this, 4, Intent(this, LocationShareService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val (title, text) = if (confirmed) {
+            ("🏍️ " + t("Ride direkod (auto)", "Recording ride (auto)", "正在记录骑行（自动）", "பயணம் பதிவாகிறது (தானியங்கி)")) to
+                t("Tamat sendiri bila anda berhenti 5 minit.", "Ends by itself when you stop for 5 minutes.", "停下5分钟后自动结束。", "5 நிமிடம் நின்றால் தானாக முடியும்.")
+        } else {
+            ("🤖 " + t("Kesan kenderaan…", "Vehicle detected…", "检测到交通工具…", "வாகனம் கண்டறியப்பட்டது…")) to
+                t("Rekod bermula bila laju 20 km/j.", "Recording starts at 20 km/h.", "时速达到20公里时开始记录。", "20 கி.மீ./ம வேகத்தில் பதிவு தொடங்கும்.")
+        }
+        return Notification.Builder(this, CH)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setOngoing(true)
+            .setContentIntent(open)
+            .addAction(Notification.Action.Builder(null, t("Henti", "Stop", "停止", "நிறுத்து"), stop).build())
+            .build()
+    }
+
     companion object {
+        const val AUTO_DONE_ID = 4346
+        private const val CH_AUTO = "auto_ride"
         private const val NOTIF_ID = 4345
         private const val CH = "rider_share"
         private const val CH_GROUP = "rider_group_msg"
@@ -309,11 +461,29 @@ class LocationShareService : Service(), LocationListener {
             }
         }
 
+        /** Auto rekod: sensor kesan kenderaan → GPS untuk sahkan ride (dipanggil dari latar, dikecualikan Android). */
+        fun startAuto(c: Context) {
+            RideLog.setAutoSession(c, true)
+            runCatching { c.startForegroundService(Intent(c, LocationShareService::class.java)) }
+                .onFailure { RideLog.setAutoSession(c, false) }
+        }
+
+        /** Auto rekod dimatikan — henti sesi auto (bukan kongsi / ride solo). */
+        fun stopAuto(c: Context) {
+            if (!RideLog.autoSession(c)) return
+            RideLog.setAutoSession(c, false)
+            if (RiderGroup.sharing(c).isEmpty() && !RideLog.solo(c)) {
+                c.stopService(Intent(c, LocationShareService::class.java))
+                running = false
+            }
+        }
+
         /** Henti semua dan buang lokasi saya dari semua kumpulan. */
         fun stopAll(c: Context) {
             val groups = sharedGroups(c)
             RiderGroup.clearSharing(c)
             RideLog.setSolo(c, false)
+            RideLog.setAutoSession(c, false)
             c.stopService(Intent(c, LocationShareService::class.java))
             running = false
             val app = c.applicationContext
