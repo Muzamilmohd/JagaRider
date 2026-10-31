@@ -58,6 +58,7 @@ class LocationShareService : Service(), LocationListener {
     /** Setiap 20 saat semasa berkongsi: mesej pantas baru + amaran rider tertinggal / berhenti lama. */
     private val groupTick = object : Runnable {
         override fun run() {
+            if (!autoOnly) RideLog.snapshot(this@LocationShareService)
             runCatching { watchGroups() }
             worker.postDelayed(this, if (Prefs.batterySaver(this@LocationShareService)) 60_000L else 20_000L)
         }
@@ -71,6 +72,11 @@ class LocationShareService : Service(), LocationListener {
     private var confirmed = false
     private var lastMove = 0L
     private var anchor: Location? = null
+    /** Titik GPS pertama sesi auto + titik sebelumnya (kira laju bila GPS tak beri laju). */
+    private var firstFix: Location? = null
+    private var prevFix: Location? = null
+    /** Laju tertinggi dilihat semasa menunggu pengesahan (untuk mesej "kenapa tak direkod"). */
+    private var armMaxKmh = 0.0
 
     /** Setiap 15 saat dalam sesi auto: batal kalau tak disahkan, tamat bila berhenti lama. */
     private val autoTick = object : Runnable {
@@ -78,32 +84,44 @@ class LocationShareService : Service(), LocationListener {
             if (!autoOnly) return
             val now = System.currentTimeMillis()
             if (!confirmed && now - armedAt > AutoRide.ARM_TIMEOUT_MS) {
-                endAuto(save = false)
+                endAuto(save = false, why = "slow")
                 return
             }
             if (confirmed && now - lastMove > AutoRide.STOP_MS) {
                 endAuto(save = true)
                 return
             }
+            if (confirmed) RideLog.snapshot(this@LocationShareService)
             worker.postDelayed(this, 15_000L)
         }
     }
 
-    /** Sahkan ride (laju ≥ 20 km/j selama 30 s) dan jejak bila kali terakhir bergerak. */
+    /**
+     * Sahkan ride: laju ≥ 20 km/j selama 30 s, ATAU sudah bergerak ≥ 500 m dari titik mula (GPS dalam
+     * poket / beg kadang tak beri laju yang stabil). Selepas disahkan, jejak bila kali terakhir bergerak.
+     */
     private fun autoCheck(loc: Location) {
+        if (loc.provider != LocationManager.GPS_PROVIDER) return
         val now = System.currentTimeMillis()
-        val kmh = if (loc.hasSpeed()) loc.speed * 3.6 else 0.0
+        val p = prevFix
+        prevFix = loc
+        val calc = if (p != null && loc.time > p.time) p.distanceTo(loc) / ((loc.time - p.time) / 1000.0) * 3.6 else 0.0
+        val kmh = if (loc.hasSpeed() && loc.speed > 0f) loc.speed * 3.6 else calc.coerceAtMost(200.0)
         if (!confirmed) {
+            armMaxKmh = maxOf(armMaxKmh, kmh)
+            val f = firstFix ?: loc.also { firstFix = it }
             if (kmh >= AutoRide.START_KMH) {
                 if (fastSince == 0L) fastSince = now
-                if (now - fastSince >= AutoRide.CONFIRM_MS) {
-                    confirmed = true
-                    lastMove = now
-                    anchor = loc
-                    getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification(emptyList()))
-                }
             } else if (kmh < 10) {
                 fastSince = 0L
+            }
+            val fastEnough = fastSince != 0L && now - fastSince >= AutoRide.CONFIRM_MS
+            val farEnough = f.distanceTo(loc) >= AutoRide.CONFIRM_M
+            if (fastEnough || farEnough) {
+                confirmed = true
+                lastMove = now
+                anchor = loc
+                getSystemService(NotificationManager::class.java).notify(NOTIF_ID, notification(emptyList()))
             }
             return
         }
@@ -115,11 +133,15 @@ class LocationShareService : Service(), LocationListener {
     }
 
     /** Tamat sesi auto: simpan ride (masa tamat = kali terakhir bergerak) atau batal, kemudian henti servis. */
-    private fun endAuto(save: Boolean) {
+    private fun endAuto(save: Boolean, why: String = "") {
+        val cur = RideLog.current()
         if (save) {
-            RideLog.finish(this, lastMove)?.let { autoDone(it) }
+            val r = RideLog.finish(this, lastMove)
+            if (r != null) autoDone(r)
+            RideLog.setLastAuto(this, if (r != null) "saved" else "short", r?.km ?: cur?.first ?: 0.0, r?.maxKmh ?: cur?.third ?: 0.0)
         } else {
-            RideLog.cancel()
+            RideLog.cancel(this)
+            RideLog.setLastAuto(this, why, cur?.first ?: 0.0, armMaxKmh)
         }
         RideLog.setAutoSession(this, false)
         autoOnly = false
@@ -240,6 +262,8 @@ class LocationShareService : Service(), LocationListener {
     override fun onCreate() {
         super.onCreate()
         worker = Handler(HandlerThread("share").apply { start() }.looper)
+        // Proses sebelum ini dibunuh di tengah ride — simpan bahagian yang sudah direkod
+        RideLog.recover(this)
     }
 
     @SuppressLint("MissingPermission")
@@ -247,6 +271,11 @@ class LocationShareService : Service(), LocationListener {
         I18n.lang = Prefs.lang(this)
         if (intent?.action == ACTION_STOP) {
             stopAll(this)
+            return START_NOT_STICKY
+        }
+        // Sensor kata dah turun dari kenderaan sebelum ride disahkan → batal (bukan ride)
+        if (intent?.action == ACTION_AUTO_EXIT) {
+            if (autoOnly && !confirmed) endAuto(save = false, why = "slow")
             return START_NOT_STICKY
         }
         val groups = sharedGroups(this)
@@ -268,6 +297,9 @@ class LocationShareService : Service(), LocationListener {
             if (armedAt == 0L) {
                 armedAt = System.currentTimeMillis()
                 fastSince = 0L
+                firstFix = null
+                prevFix = null
+                armMaxKmh = 0.0
                 confirmed = false
                 RideLog.begin(this)
                 RideLog.auto = true
@@ -328,7 +360,12 @@ class LocationShareService : Service(), LocationListener {
 
     override fun onDestroy() {
         // Sesi auto yang belum disahkan bukan ride — jangan simpan
-        if (autoOnly && !confirmed) RideLog.cancel() else RideLog.finish(this)
+        if (autoOnly && !confirmed) {
+            RideLog.setLastAuto(this, "slow", RideLog.current()?.first ?: 0.0, armMaxKmh)
+            RideLog.cancel(this)
+        } else {
+            RideLog.finish(this)?.let { if (autoOnly) RideLog.setLastAuto(this, "saved", it.km, it.maxKmh) }
+        }
         if (autoOnly) RideLog.setAutoSession(this, false)
         running = false
         runCatching { getSystemService(LocationManager::class.java).removeUpdates(this) }
@@ -413,6 +450,7 @@ class LocationShareService : Service(), LocationListener {
         /** Amaran bila rider lain lebih jauh dari ini (km) semasa saya sedang ride. */
         private const val LEFT_BEHIND_KM = 3.0
         private const val ACTION_STOP = "com.jagarider.STOP_SHARE"
+        private const val ACTION_AUTO_EXIT = "com.jagarider.AUTO_EXIT"
 
         @Volatile
         var running = false
@@ -466,6 +504,12 @@ class LocationShareService : Service(), LocationListener {
             RideLog.setAutoSession(c, true)
             runCatching { c.startForegroundService(Intent(c, LocationShareService::class.java)) }
                 .onFailure { RideLog.setAutoSession(c, false) }
+        }
+
+        /** Sensor: turun dari kenderaan — batalkan sesi auto yang belum disahkan. */
+        fun autoExit(c: Context) {
+            if (!running || !RideLog.autoSession(c)) return
+            runCatching { c.startService(Intent(c, LocationShareService::class.java).setAction(ACTION_AUTO_EXIT)) }
         }
 
         /** Auto rekod dimatikan — henti sesi auto (bukan kongsi / ride solo). */

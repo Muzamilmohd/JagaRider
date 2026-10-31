@@ -51,7 +51,7 @@ object RideLog {
     /** Tambah satu lokasi GPS. Abaikan bacaan kurang tepat dan lompatan mustahil. */
     @Synchronized
     fun add(loc: Location) {
-        if (start == 0L || (loc.hasAccuracy() && loc.accuracy > 35f)) return
+        if (start == 0L || (loc.hasAccuracy() && loc.accuracy > 50f)) return
         val p = prev
         if (p == null) {
             prev = loc
@@ -77,9 +77,46 @@ object RideLog {
     @Synchronized
     fun finish(c: Context, end: Long = System.currentTimeMillis()): Ride? {
         if (start == 0L) return null
-        var r = Ride(start, end, km, movingMs, maxKmh, label, auto)
+        val r = Ride(start, end, km, movingMs, maxKmh, label, auto)
         start = 0L
         auto = false
+        sp(c).edit().remove("cur").apply()
+        return save(c, r)
+    }
+
+    /** Batal sesi tanpa simpan (auto rekod yang tak disahkan sebagai ride). */
+    @Synchronized
+    fun cancel(c: Context) {
+        start = 0L
+        auto = false
+        sp(c).edit().remove("cur").apply()
+    }
+
+    /**
+     * Simpan sesi semasa ke storan (dipanggil berkala oleh servis). Kalau Android bunuh app di tengah
+     * ride, recover() simpan bahagian yang sudah direkod — ride tak hilang.
+     */
+    @Synchronized
+    fun snapshot(c: Context) {
+        if (start == 0L) return
+        sp(c).edit().putString("cur", JSONObject().put("s", start).put("e", System.currentTimeMillis()).put("k", km)
+            .put("m", movingMs).put("x", maxKmh).put("l", label).put("a", auto).toString()).apply()
+    }
+
+    /** Ride yang terputus (app dibunuh) → simpan apa yang ada. Hanya bila tiada sesi berjalan dalam proses ini. */
+    @Synchronized
+    fun recover(c: Context) {
+        if (start != 0L) return
+        val s = sp(c).getString("cur", null) ?: return
+        sp(c).edit().remove("cur").apply()
+        runCatching {
+            val o = JSONObject(s)
+            save(c, Ride(o.getLong("s"), o.getLong("e"), o.getDouble("k"), o.getLong("m"), o.getDouble("x"), o.optString("l"), o.optBoolean("a")))
+        }
+    }
+
+    private fun save(c: Context, ride: Ride): Ride? {
+        var r = ride
         if (r.km < 0.5) return null
         val arr = JSONArray(sp(c).getString("list", "[]"))
         val prev = if (arr.length() > 0) arr.getJSONObject(arr.length() - 1) else null
@@ -97,12 +134,21 @@ object RideLog {
         return r
     }
 
-    /** Batal sesi tanpa simpan (auto rekod yang tak disahkan sebagai ride). */
-    @Synchronized
-    fun cancel() {
-        start = 0L
-        auto = false
+    /**
+     * Keputusan sesi auto terakhir (dipapar dalam Ride Saya) — supaya rider tahu kenapa ride tak
+     * direkod. result: "saved" / "short" / "slow" / "stopped"; km & maks laju yang dilihat GPS.
+     */
+    data class AutoResult(val time: Long, val result: String, val km: Double, val maxKmh: Double)
+
+    fun setLastAuto(c: Context, result: String, km: Double, maxKmh: Double) {
+        sp(c).edit().putString("last_auto", JSONObject().put("t", System.currentTimeMillis()).put("r", result)
+            .put("k", km).put("x", maxKmh).toString()).apply()
     }
+
+    fun lastAuto(c: Context): AutoResult? = runCatching {
+        val o = JSONObject(sp(c).getString("last_auto", null) ?: return null)
+        AutoResult(o.getLong("t"), o.getString("r"), o.getDouble("k"), o.getDouble("x"))
+    }.getOrNull()
 
     /** Buang satu ride (ikut masa mula) — "Bukan ride? Buang" atau tekan lama dalam senarai. */
     fun remove(c: Context, start: Long) {

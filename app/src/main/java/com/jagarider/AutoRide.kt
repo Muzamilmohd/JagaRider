@@ -17,7 +17,8 @@ import com.google.android.gms.location.DetectedActivity
 /**
  * Auto rekod ride. Peringkat 1: sensor gerakan Google (Activity Recognition, hampir tiada bateri) kesan
  * "mula naik kenderaan". Peringkat 2: LocationShareService hidupkan GPS dalam mod auto — rekod bermula
- * bila laju ≥ 20 km/j selama 30 s, batal kalau tak sampai dalam 3 minit, tamat bila berhenti 5 minit.
+ * bila laju ≥ 20 km/j selama 30 s (atau bergerak 500 m), batal bila turun dari kenderaan sebelum itu (atau
+ * selepas 10 minit), tamat bila berhenti 5 minit. Keputusan terakhir disimpan (RideLog.lastAuto).
  */
 object AutoRide {
 
@@ -25,7 +26,9 @@ object AutoRide {
     const val START_KMH = 20.0
     const val CONFIRM_MS = 30_000L
     /** Batal kalau tak capai START_KMH dalam tempoh ini selepas sensor kesan kenderaan. */
-    const val ARM_TIMEOUT_MS = 3 * 60_000L
+    const val ARM_TIMEOUT_MS = 10 * 60_000L
+    /** Atau sahkan bila sudah bergerak sejauh ini (meter) dari titik GPS pertama. */
+    const val CONFIRM_M = 500f
     /** Ride tamat bila tak bergerak selama ini. */
     const val STOP_MS = 5 * 60_000L
     /** Ride auto baru dalam tempoh ini selepas ride auto sebelumnya → gabung (berhenti isi minyak / makan). */
@@ -96,7 +99,12 @@ class AutoRideReceiver : BroadcastReceiver() {
         if (!ActivityTransitionResult.hasResult(intent)) return
         val result = ActivityTransitionResult.extractResult(intent) ?: return
         val last = result.transitionEvents.lastOrNull() ?: return
-        if (last.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) AutoRide.onEnterVehicle(ctx)
-        // EXIT: tiada tindakan — servis tamatkan ride sendiri bila berhenti 5 minit (lampu isyarat, jem)
+        // EXIT sebelum ride disahkan = bukan ride (cth. jalan kaki) → batal; sensor akan hantar ENTER baru bila
+        // naik semula. Selepas disahkan, EXIT diabaikan (berlaku juga di lampu isyarat / jem) — servis tamatkan
+        // ride sendiri bila berhenti 5 minit.
+        when (last.transitionType) {
+            ActivityTransition.ACTIVITY_TRANSITION_ENTER -> AutoRide.onEnterVehicle(ctx)
+            ActivityTransition.ACTIVITY_TRANSITION_EXIT -> LocationShareService.autoExit(ctx)
+        }
     }
 }

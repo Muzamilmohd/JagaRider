@@ -55,6 +55,8 @@ class MyRidePage(private val act: MainActivity) {
 
     fun onShow() {
         visible = true
+        // Ride terputus (app dibunuh Android) — simpan bahagian yang sudah direkod
+        if (!LocationShareService.running) RideLog.recover(act)
         // Rider pernah mula ride solo tapi servis terhenti (phone restart / app dikemas kini) — sambung semula
         if (RideLog.solo(act) && !LocationShareService.running && hasLocation()) LocationShareService.startSolo(act)
         build()
@@ -202,6 +204,7 @@ class MyRidePage(private val act: MainActivity) {
                 "\"உடல் செயல்பாடு\" மற்றும் \"எப்போதும்\" இருப்பிட அனுமதி தேவை. அனுமதி வழங்க இங்கே தட்டவும்.",
             ), 13f, bold = true, color = act.pal.orange).apply { setOnClickListener { enableAuto() } })
         }
+        if (on) RideLog.lastAuto(act)?.let { c.addView(lastAutoView(it)) }
         c.addView(act.label(t(
             "Sensor gerakan phone kesan bila anda naik motor — rekod bermula bila laju 20 km/j dan tamat bila berhenti 5 minit. Berhenti isi minyak / makan (bawah 15 minit) dikira satu ride. Sensor tak boleh beza motor dengan kereta — tekan \"Bukan ride? Buang\" dalam notifikasi.",
             "The phone's motion sensor notices when you get on the bike — recording starts at 20 km/h and ends after a 5-minute stop. Fuel / food stops (under 15 min) count as one ride. The sensor can't tell a bike from a car — tap \"Not a ride? Delete\" in the notification.",
@@ -232,6 +235,36 @@ class MyRidePage(private val act: MainActivity) {
             "在群组骑行中共享位置时也会记录。仅保存在此手机。",
             "குழுப் பயணத்தில் இருப்பிடம் பகிரும்போதும் பதிவாகும். இந்த தொலைபேசியில் மட்டும்.",
         ), 12f, color = act.pal.sub))
+    }
+
+    /** Keputusan sesi auto terakhir — terangkan kenapa sesuatu ride tak direkod. */
+    private fun lastAutoView(r: RideLog.AutoResult): View {
+        val day = java.text.SimpleDateFormat("EEE d MMM", Locale(I18n.lang.code)).format(java.util.Date(r.time)) + " " + Clock.time(r.time)
+        val km = String.format(Locale.US, "%.1f", r.km)
+        val max = String.format(Locale.US, "%.0f", r.maxKmh)
+        val (icon, text) = when (r.result) {
+            "saved" -> "✅" to t("Direkod: $km km", "Recorded: $km km", "已记录：${km} 公里", "பதிவானது: $km கி.மீ.")
+            "short" -> "⚠️" to t(
+                "Tak disimpan — jarak cuma $km km (minimum 0.5 km)",
+                "Not saved — only $km km (minimum 0.5 km)",
+                "未保存——只有 ${km} 公里（最少 0.5 公里）",
+                "சேமிக்கப்படவில்லை — $km கி.மீ. மட்டும் (குறைந்தது 0.5 கி.மீ.)",
+            )
+            else -> "⚠️" to t(
+                "Tak direkod — GPS tak kesan ride (laju maks $max km/j). Pastikan GPS / lokasi dihidupkan.",
+                "Not recorded — GPS didn't see a ride (top speed $max km/h). Make sure GPS / location is on.",
+                "未记录——GPS 未检测到骑行（最高 $max 公里/时）。请确认 GPS/定位已开启。",
+                "பதிவாகவில்லை — GPS பயணத்தைக் காணவில்லை (அதிக வேகம் $max கி.மீ./ம). GPS / இருப்பிடம் இயக்கத்தில் உள்ளதா பார்க்கவும்.",
+            )
+        }
+        return act.label("$icon " + t("Auto terakhir", "Last auto", "上次自动", "கடைசி தானியங்கி") + " ($day): $text", 13f,
+            color = if (r.result == "saved") android.graphics.Color.parseColor("#43A047") else act.pal.orange).apply {
+            setPadding(act.dp(10), act.dp(6), act.dp(10), act.dp(6))
+            background = GradientDrawable().apply {
+                setColor(act.pal.bg)
+                cornerRadius = act.dp(10).toFloat()
+            }
+        }
     }
 
     /** Senarai ride terkini — tekan lama untuk buang. */
